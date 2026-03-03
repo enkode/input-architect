@@ -33,11 +33,9 @@
 
 ## Screenshots
 
-> **Note:** Add your own screenshots to `docs/screenshots/` and they'll appear here.
-
-| Keyboard Mapping | Per-Key RGB | Firmware Flash |
-|:---:|:---:|:---:|
-| ![Mapping](docs/screenshots/mapping.png) | ![RGB](docs/screenshots/rgb.png) | ![Firmware](docs/screenshots/firmware.png) |
+<p align="center">
+  <img src="screenshots/image.png" alt="Input Architect" width="800" />
+</p>
 
 ---
 

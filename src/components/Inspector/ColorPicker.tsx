@@ -2,7 +2,7 @@ import { useState, useRef, useEffect } from 'react';
 import { hid } from '../../services/HIDService';
 import { useDevice } from '../../context/DeviceContext';
 import { FRAMEWORK_RGB_EFFECTS } from '../../data/definitions/framework16';
-import { Save, ChevronDown } from 'lucide-react';
+import { Save, ChevronDown, CheckCircle2 } from 'lucide-react';
 import { clsx } from 'clsx';
 import type { VIAKeyboardDefinition } from '../../types/via';
 
@@ -63,6 +63,7 @@ export function ColorPicker({ definition, selectedKeyIndices = [] }: ColorPicker
     const [isPerKeyMode, setIsPerKeyMode] = useState(false);
     const [perKeyEnabling, setPerKeyEnabling] = useState(false);
     const [perKeyBrightness, setPerKeyBrightness] = useState(255);
+    const [saveState, setSaveState] = useState<'idle' | 'saving' | 'saved' | 'error'>('idle');
 
     const isSending = useRef(false);
     const pendingColor = useRef<{ r: number; g: number; b: number } | null>(null);
@@ -92,14 +93,6 @@ export function ColorPicker({ definition, selectedKeyIndices = [] }: ColorPicker
         })();
     }, []);
 
-    // Disable per-key mode when switching away
-    useEffect(() => {
-        return () => {
-            if (isPerKeyMode) {
-                hid.disablePerKeyMode().catch(console.error);
-            }
-        };
-    }, [isPerKeyMode]);
 
     const sendColorUpdate = async (r: number, g: number, b: number) => {
         if (isSending.current) {
@@ -183,8 +176,18 @@ export function ColorPicker({ definition, selectedKeyIndices = [] }: ColorPicker
         hid.setRGBEffectSpeed(val).catch(console.error);
     };
 
-    const handleSave = () => {
-        hid.saveRGBSettings().catch(console.error);
+    const handleSave = async () => {
+        if (saveState === 'saving') return;
+        setSaveState('saving');
+        try {
+            await hid.saveRGBSettings();
+            setSaveState('saved');
+            setTimeout(() => setSaveState('idle'), 2000);
+        } catch (err) {
+            console.error('Save failed:', err);
+            setSaveState('error');
+            setTimeout(() => setSaveState('idle'), 3000);
+        }
     };
 
     const currentEffect = FRAMEWORK_RGB_EFFECTS.find(e => e.id === effectId);
@@ -372,10 +375,26 @@ export function ColorPicker({ definition, selectedKeyIndices = [] }: ColorPicker
             {/* Save button */}
             <button
                 onClick={handleSave}
-                className="w-full py-2 rounded-lg font-bold text-xs tracking-wide flex items-center justify-center gap-2 bg-surface-highlight hover:bg-primary hover:text-white transition-all"
+                disabled={saveState === 'saving'}
+                className={clsx(
+                    "w-full py-2 rounded-lg font-bold text-xs tracking-wide flex items-center justify-center gap-2 transition-all",
+                    saveState === 'saved'
+                        ? 'bg-green-600 text-white'
+                        : saveState === 'error'
+                            ? 'bg-red-600 text-white'
+                            : 'bg-surface-highlight hover:bg-primary hover:text-white',
+                    saveState === 'saving' && 'opacity-50 cursor-wait'
+                )}
             >
-                <Save size={14} />
-                Save to Device
+                {saveState === 'saved' ? (
+                    <><CheckCircle2 size={14} /> Saved!</>
+                ) : saveState === 'error' ? (
+                    <><Save size={14} /> Save Failed</>
+                ) : saveState === 'saving' ? (
+                    <><Save size={14} /> Saving...</>
+                ) : (
+                    <><Save size={14} /> Save to Device</>
+                )}
             </button>
         </div>
     );
