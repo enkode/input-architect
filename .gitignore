@@ -43,3 +43,6 @@ fw_build_log.txt
 
 # Tauri build output
 src-tauri/target
+
+# Screenshots (local only)
+screenshots/

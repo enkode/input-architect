@@ -33,9 +33,7 @@
 
 ## Screenshots
 
-<p align="center">
-  <img src="screenshots/image.png" alt="Input Architect" width="800" />
-</p>
+*Coming soon*
 
 ---
 
