@@ -261,12 +261,60 @@ export class HIDService {
         return null;
     }
 
-    async saveRGBSettings() {
-        if (this.isV3) {
-            await this.sendCommand(VIA_CUSTOM_SAVE, [CHANNEL_RGB_MATRIX]);
-        } else {
-            await this.sendCommand(VIA_CUSTOM_SAVE);
+    /**
+     * Save all RGB settings to device EEPROM.
+     * Sends current values to RAM first, then issues the save command,
+     * then reads back to verify the write succeeded.
+     */
+    async saveRGBSettings(currentState?: {
+        brightness: number;
+        effectId: number;
+        speed: number;
+        hue: number;
+        saturation: number;
+    }): Promise<boolean> {
+        // Step 1: Re-send all current values to ensure RAM is in sync
+        if (currentState) {
+            await this.setRGBBrightness(currentState.brightness);
+            await this.setRGBEffect(currentState.effectId);
+            await this.setRGBEffectSpeed(currentState.speed);
+            await this.setRGBColor(currentState.hue, currentState.saturation);
         }
+
+        // Step 2: Issue the EEPROM save command
+        let saveResponse: DataView | null;
+        if (this.isV3) {
+            saveResponse = await this.sendCommand(VIA_CUSTOM_SAVE, [CHANNEL_RGB_MATRIX]);
+        } else {
+            saveResponse = await this.sendCommand(VIA_CUSTOM_SAVE);
+        }
+
+        // Check if save was rejected (0xFF) or timed out (null)
+        if (!saveResponse) {
+            console.error('Save command timed out — no response from device');
+            return false;
+        }
+        if (saveResponse.byteLength > 0 && saveResponse.getUint8(0) === 0xFF) {
+            console.error('Save command was rejected by firmware (0xFF)');
+            return false;
+        }
+
+        // Step 3: Read back and verify (if we know what we saved)
+        if (currentState) {
+            const readBrightness = await this.getRGBBrightness();
+            const readEffect = await this.getRGBEffect();
+            if (readBrightness !== null && readBrightness !== currentState.brightness) {
+                console.warn(`Save verify: brightness mismatch (sent ${currentState.brightness}, read ${readBrightness})`);
+                return false;
+            }
+            if (readEffect !== null && readEffect !== currentState.effectId) {
+                console.warn(`Save verify: effect mismatch (sent ${currentState.effectId}, read ${readEffect})`);
+                return false;
+            }
+        }
+
+        console.log('RGB settings saved to EEPROM successfully');
+        return true;
     }
 
     // --- Per-Key RGB (nucleardog rgb_remote protocol) ---

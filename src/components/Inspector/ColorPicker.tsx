@@ -180,9 +180,22 @@ export function ColorPicker({ definition, selectedKeyIndices = [] }: ColorPicker
         if (saveState === 'saving') return;
         setSaveState('saving');
         try {
-            await hid.saveRGBSettings();
-            setSaveState('saved');
-            setTimeout(() => setSaveState('idle'), 2000);
+            // Convert current RGB color to HSV for the save payload
+            const [h, s] = rgbToHsv(color.r, color.g, color.b);
+            const ok = await hid.saveRGBSettings({
+                brightness,
+                effectId,
+                speed,
+                hue: h,
+                saturation: s,
+            });
+            if (ok) {
+                setSaveState('saved');
+                setTimeout(() => setSaveState('idle'), 2000);
+            } else {
+                setSaveState('error');
+                setTimeout(() => setSaveState('idle'), 3000);
+            }
         } catch (err) {
             console.error('Save failed:', err);
             setSaveState('error');
