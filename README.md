@@ -9,10 +9,11 @@
 </p>
 
 <p align="center">
-  Remap keys, control per-key RGB lighting, flash custom firmware — all from your browser.
+  Remap keys, control per-key RGB lighting, flash custom firmware — available as a desktop app or in your browser.
 </p>
 
 <p align="center">
+  <a href="#download">Download</a> &bull;
   <a href="#features">Features</a> &bull;
   <a href="#getting-started">Getting Started</a> &bull;
   <a href="#usage">Usage</a> &bull;
@@ -23,9 +24,14 @@
 </p>
 
 <p align="center">
+  <a href="https://github.com/enkode/input-architect/releases/latest"><img src="https://img.shields.io/badge/Download-Windows%20Installer-F75821?style=for-the-badge&logo=windows" /></a>
+</p>
+
+<p align="center">
   <img src="https://img.shields.io/badge/Framework-Laptop%2016-orange?style=flat-square" />
   <img src="https://img.shields.io/badge/WebHID-Supported-blue?style=flat-square" />
   <img src="https://img.shields.io/badge/VIA-V2%20%26%20V3-green?style=flat-square" />
+  <img src="https://img.shields.io/badge/Tauri-Desktop%20App-24C8D8?style=flat-square&logo=tauri" />
   <img src="https://img.shields.io/badge/license-MIT-brightgreen?style=flat-square" />
 </p>
 
@@ -34,6 +40,33 @@
 ## Screenshots
 
 *Coming soon*
+
+---
+
+## Download
+
+### Desktop App (Recommended)
+
+The easiest way to use Input Architect — just download, install, and go. No code, no terminal, no setup.
+
+| Platform | Download | Size |
+|----------|----------|------|
+| Windows (64-bit) | [**Input Architect Installer**](https://github.com/enkode/input-architect/releases/latest) | ~2 MB |
+
+> Built with [Tauri](https://tauri.app/) — lightweight native desktop app using your system's WebView2 runtime. No bloated Electron, no 150 MB downloads.
+
+### Browser App
+
+If you prefer not to install anything, you can run Input Architect directly in Chrome or Edge:
+
+```bash
+git clone https://github.com/enkode/input-architect.git
+cd input-architect
+npm install
+npm run dev
+```
+
+Open **http://localhost:5173** in Chrome 89+ or Edge 89+ (WebHID required).
 
 ---
 
@@ -71,33 +104,40 @@
 
 ## Getting Started
 
+**Most users:** Just [download the installer](#download) — no setup required.
+
+**Developers** who want to build from source or contribute:
+
 ### Prerequisites
 
-- **Browser:** Chrome 89+ or Edge 89+ (WebHID support required — Firefox/Safari not supported)
+- **Node.js** 18+ and **npm**
+- **Browser:** Chrome 89+ or Edge 89+ (WebHID required — Firefox/Safari not supported)
 - **Device:** Framework Laptop 16 with ANSI Keyboard or RGB Macropad
 - **For custom firmware builds:** [Git](https://git-scm.com/) installed and in your PATH
+- **For desktop builds:** [Rust](https://rustup.rs/) toolchain and [VS Build Tools](https://visualstudio.microsoft.com/visual-cpp-build-tools/)
 
-### Quick Start
+### Development
 
 ```bash
-# Clone the repository
 git clone https://github.com/enkode/input-architect.git
 cd input-architect
-
-# Install dependencies
 npm install
 
-# Start the dev server
+# Run in browser
 npm run dev
-```
 
-Open **http://localhost:5173** and click **Connect Your Device**.
+# Run as desktop app (requires Rust)
+npm run tauri:dev
+```
 
 ### Production Build
 
 ```bash
+# Web build
 npm run build
-npm run preview
+
+# Desktop installer (outputs to src-tauri/target/release/bundle/)
+npm run tauri:build
 ```
 
 ---
@@ -269,6 +309,7 @@ src/
 |---|---|
 | **Framework** | React 19 + TypeScript 5.9 |
 | **Build** | Vite 7 |
+| **Desktop** | Tauri 2 (Rust + WebView2) |
 | **Styling** | Tailwind CSS v4 |
 | **Animations** | Framer Motion |
 | **Icons** | Lucide React |
@@ -314,9 +355,11 @@ Contributions are welcome! Whether it's bug reports, feature requests, or pull r
 ### Development
 
 ```bash
-npm run dev     # Start dev server with HMR
-npm run build   # Type-check + production build
-npm run lint    # Run ESLint
+npm run dev          # Start web dev server with HMR
+npm run build        # Type-check + production build
+npm run lint         # Run ESLint
+npm run tauri:dev    # Launch desktop app in dev mode
+npm run tauri:build  # Build desktop installer
 ```
 
 ### Adding Support for New Devices
