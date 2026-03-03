@@ -1,0 +1,40 @@
+import { useRef } from 'react';
+import { VirtualKeyboard } from './VirtualKeyboard';
+
+import type { VIAKeyboardDefinition } from '../../types/via';
+
+interface KeyboardStageProps {
+    definition: VIAKeyboardDefinition;
+    pressedKeys: string[];
+    selectedKeyIndices: number[];
+    onKeySelect: (index: number, isMulti: boolean) => void;
+    deviceKeymap?: number[];
+}
+
+export function KeyboardStage({ definition, pressedKeys, selectedKeyIndices, onKeySelect, deviceKeymap }: KeyboardStageProps) {
+    const containerRef = useRef<HTMLDivElement>(null);
+
+    return (
+        <div
+            ref={containerRef}
+            className="w-full h-full flex items-center justify-center overflow-hidden bg-background"
+        >
+            <div className="relative transform scale-90 md:scale-100 transition-transform">
+                <div className="relative cursor-default">
+                    <div className="mb-4 text-center">
+                        <h2 className="text-xl font-bold text-text-primary tracking-tight">{definition.name}</h2>
+                        <p className="text-xs text-text-muted uppercase tracking-widest">VIA Device</p>
+                    </div>
+
+                    <VirtualKeyboard
+                        definition={definition}
+                        pressedKeys={pressedKeys}
+                        selectedKeyIndices={selectedKeyIndices}
+                        onKeySelect={onKeySelect}
+                        deviceKeymap={deviceKeymap}
+                    />
+                </div>
+            </div>
+        </div>
+    );
+}

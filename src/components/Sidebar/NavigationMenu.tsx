@@ -1,0 +1,47 @@
+import { clsx } from 'clsx';
+import { Keyboard, Lightbulb, Play, HardDriveDownload } from 'lucide-react';
+
+export type AppMode = 'mapping' | 'lighting' | 'macros' | 'settings' | 'firmware';
+
+interface NavigationMenuProps {
+    activeMode: AppMode;
+    onModeSelect: (mode: AppMode) => void;
+}
+
+export function NavigationMenu({ activeMode, onModeSelect }: NavigationMenuProps) {
+    const items = [
+        { id: 'mapping', label: 'Key Mapping', icon: Keyboard },
+        { id: 'lighting', label: 'Lighting', icon: Lightbulb },
+        { id: 'macros', label: 'Macros', icon: Play },
+        { id: 'firmware', label: 'Firmware', icon: HardDriveDownload },
+    ] as const;
+
+    return (
+        <nav className="flex flex-col gap-2 p-2">
+            {items.map((item) => {
+                const isActive = activeMode === item.id;
+                const Icon = item.icon;
+
+                return (
+                    <button
+                        key={item.id}
+                        onClick={() => onModeSelect(item.id)}
+                        className={clsx(
+                            "flex items-center gap-3 px-3 py-2.5 rounded-md transition-all duration-200 group text-sm font-medium",
+                            isActive
+                                ? "bg-primary text-white shadow-lg shadow-primary/20"
+                                : "text-text-muted hover:text-text-primary hover:bg-surface-highlight"
+                        )}
+                    >
+                        <Icon size={18} className={clsx(isActive ? "text-white" : "group-hover:text-primary transition-colors")} />
+                        <span>{item.label}</span>
+
+                        {isActive && (
+                            <div className="ml-auto w-1.5 h-1.5 rounded-full bg-white animate-pulse" />
+                        )}
+                    </button>
+                );
+            })}
+        </nav>
+    );
+}
