@@ -9,6 +9,7 @@ interface DeviceContextType {
     protocolVersion: number;
     hasPerKeyRGB: boolean;
     connectDevice: () => Promise<void>;
+    switchDevice: () => Promise<void>;
     disconnectDevice: () => void;
     activeLayer: number;
     setActiveLayer: (layer: number) => void;
@@ -42,6 +43,11 @@ export function DeviceProvider({ children }: { children: ReactNode }) {
             setHasPerKeyRGB(hid.hasPerKeySupport);
         });
 
+        // Auto-reconnect to a previously-permitted device on page load
+        if (!hid.isDeviceConnected()) {
+            hid.autoConnect();
+        }
+
         return unsubscribe;
     }, []);
 
@@ -49,6 +55,25 @@ export function DeviceProvider({ children }: { children: ReactNode }) {
         setIsConnecting(true);
         try {
             await hid.requestDevice();
+        } finally {
+            setIsConnecting(false);
+        }
+    };
+
+    const switchDevice = async () => {
+        setIsConnecting(true);
+        try {
+            const currentPid = hid.getConnectedProductId();
+            hid.disconnect();
+            // Try to connect to a different permitted device
+            const permitted = await hid.getPermittedDevices();
+            const other = permitted.find(d => d.productId !== currentPid);
+            if (other) {
+                await hid.openDevice(other);
+            } else {
+                // No other permitted device — show browser picker to add one
+                await hid.requestDevice();
+            }
         } finally {
             setIsConnecting(false);
         }
@@ -67,6 +92,7 @@ export function DeviceProvider({ children }: { children: ReactNode }) {
             protocolVersion,
             hasPerKeyRGB,
             connectDevice,
+            switchDevice,
             disconnectDevice,
             activeLayer,
             setActiveLayer

@@ -12,7 +12,7 @@ import { useDevice } from './context/DeviceContext';
 import { configService } from './services/ConfigService';
 
 function App() {
-  const { isConnected, connectDevice, disconnectDevice, connectedProductId, connectedProductName, protocolVersion } = useDevice();
+  const { isConnected, connectDevice, switchDevice, disconnectDevice, connectedProductId, connectedProductName, protocolVersion } = useDevice();
 
   // Only select a definition when a device is actually connected
   const activeDefinition = !isConnected ? null
@@ -101,7 +101,7 @@ function App() {
                     Disconnect
                   </button>
                   <button
-                    onClick={async () => { disconnectDevice(); setTimeout(() => connectDevice(), 100); }}
+                    onClick={() => switchDevice()}
                     className="flex-1 px-3 py-2 rounded-lg bg-surface-highlight text-text-muted border border-border hover:border-text-secondary hover:text-text-primary transition-colors text-xs font-semibold"
                   >
                     Switch Device

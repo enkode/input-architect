@@ -50,26 +50,9 @@ export class HIDService {
         return this.protocolVersion >= 11;
     }
 
+    /** Show the browser device picker and connect to the selected device */
     async requestDevice(): Promise<boolean> {
         try {
-            // Check for already-permitted devices first (they won't appear in the picker again)
-            const granted = await navigator.hid.getDevices();
-            const matchingGranted = granted.filter(d =>
-                SUPPORTED_VIDS.includes(d.vendorId) &&
-                d.collections?.some(c => c.usagePage === RAW_HID_USAGE_PAGE && c.usage === RAW_HID_USAGE)
-            );
-
-            if (matchingGranted.length === 1) {
-                // Exactly one previously-permitted device — connect directly
-                return await this.openDevice(matchingGranted[0]);
-            }
-            if (matchingGranted.length > 1) {
-                // Multiple permitted devices — let the caller choose, or pick first for now
-                // TODO: add a device chooser UI for multi-device support
-                return await this.openDevice(matchingGranted[0]);
-            }
-
-            // No previously-permitted devices — show the browser picker
             const devices = await navigator.hid.requestDevice({
                 filters: SUPPORTED_VIDS.map(vid => ({
                     vendorId: vid,
@@ -83,6 +66,25 @@ export class HIDService {
             }
         } catch (err) {
             console.error("Failed to connect HID:", err);
+        }
+        return false;
+    }
+
+    /** Connect to a specific previously-permitted device by product ID */
+    async connectToDevice(productId: number): Promise<boolean> {
+        const granted = await this.getPermittedDevices();
+        const device = granted.find(d => d.productId === productId);
+        if (device) {
+            return await this.openDevice(device);
+        }
+        return false;
+    }
+
+    /** Auto-reconnect to a previously-permitted device (for page load) */
+    async autoConnect(): Promise<boolean> {
+        const granted = await this.getPermittedDevices();
+        if (granted.length > 0) {
+            return await this.openDevice(granted[0]);
         }
         return false;
     }
