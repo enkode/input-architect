@@ -33,33 +33,33 @@ export const KEYCODE_MAP: Record<number, string> = {
     0x001B: "X",
     0x001C: "Y",
     0x001D: "Z",
-    0x001E: "1",
-    0x001F: "2",
-    0x0020: "3",
-    0x0021: "4",
-    0x0022: "5",
-    0x0023: "6",
-    0x0024: "7",
-    0x0025: "8",
-    0x0026: "9",
-    0x0027: "0",
-    0x0028: "Ent",
+    0x001E: "!\n1",
+    0x001F: "@\n2",
+    0x0020: "#\n3",
+    0x0021: "$\n4",
+    0x0022: "%\n5",
+    0x0023: "^\n6",
+    0x0024: "&\n7",
+    0x0025: "*\n8",
+    0x0026: "(\n9",
+    0x0027: ")\n0",
+    0x0028: "Enter",
     0x0029: "Esc",
-    0x002A: "Bksp",
+    0x002A: "Backspace",
     0x002B: "Tab",
-    0x002C: "Spc",
-    0x002D: "-",
-    0x002E: "=",
-    0x002F: "[",
-    0x0030: "]",
-    0x0031: "\\",
-    0x0033: ";",
-    0x0034: "'",
-    0x0035: "`",
-    0x0036: ",",
-    0x0037: ".",
-    0x0038: "/",
-    0x0039: "Caps",
+    0x002C: "Space",
+    0x002D: "_\n-",
+    0x002E: "+\n=",
+    0x002F: "{\n[",
+    0x0030: "}\n]",
+    0x0031: "|\n\\",
+    0x0033: ":\n;",
+    0x0034: "\"\n'",
+    0x0035: "~\n`",
+    0x0036: "<\n,",
+    0x0037: ">\n.",
+    0x0038: "?\n/",
+    0x0039: "Caps Lock",
     0x003A: "F1",
     0x003B: "F2",
     0x003C: "F3",
@@ -81,10 +81,10 @@ export const KEYCODE_MAP: Record<number, string> = {
     0x004C: "Del",
     0x004D: "End",
     0x004E: "PgDn",
-    0x004F: "Right",
-    0x0050: "Left",
-    0x0051: "Down",
-    0x0052: "Up",
+    0x004F: "→",
+    0x0050: "←",
+    0x0051: "↓",
+    0x0052: "↑",
     0x0053: "NumLk",
     0x0054: "KP /",
     0x0055: "KP *",
@@ -114,14 +114,14 @@ export const KEYCODE_MAP: Record<number, string> = {
     0x00AD: "Stop",
     0x00AE: "Play",
     // Modifiers
-    0x00E0: "Ctrl",
-    0x00E1: "Shft",
-    0x00E2: "Alt",
-    0x00E3: "Gui",
-    0x00E4: "RCtl",
-    0x00E5: "RSft",
+    0x00E0: "LCtrl",
+    0x00E1: "LShift",
+    0x00E2: "LAlt",
+    0x00E3: "LWin",
+    0x00E4: "RCtrl",
+    0x00E5: "RShift",
     0x00E6: "RAlt",
-    0x00E7: "RGui"
+    0x00E7: "RWin"
 };
 
 /** Organized key categories for the UI picker */
@@ -183,6 +183,7 @@ export function buildModKeycode(baseCode: number, mods: { ctrl?: boolean; shift?
     return code;
 }
 
+/** Get display label for a keycode (may contain \n for dual-char keys) */
 export const getKeyLabel = (code: number): string => {
     // Direct lookup first
     if (KEYCODE_MAP[code] !== undefined) return KEYCODE_MAP[code] || "None";
@@ -196,9 +197,14 @@ export const getKeyLabel = (code: number): string => {
         if (mods & 0x02) parts.push('S');
         if (mods & 0x04) parts.push('A');
         if (mods & 0x08) parts.push('G');
-        parts.push(KEYCODE_MAP[base]);
+        parts.push(KEYCODE_MAP[base].replace('\n', ''));
         return parts.join('+');
     }
 
     return "0x" + code.toString(16).toUpperCase().padStart(4, '0');
+};
+
+/** Get a single-line label for compact display (strips newlines) */
+export const getKeyLabelCompact = (code: number): string => {
+    return getKeyLabel(code).replace('\n', ' ');
 };

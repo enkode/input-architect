@@ -50,9 +50,10 @@ function hsvToRgb(h: number, s: number, v: number): [number, number, number] {
 interface ColorPickerProps {
     definition?: VIAKeyboardDefinition;
     selectedKeyIndices?: number[];
+    onKeyColorChange?: (indices: number[], color: string | null) => void;
 }
 
-export function ColorPicker({ definition, selectedKeyIndices = [] }: ColorPickerProps) {
+export function ColorPicker({ definition, selectedKeyIndices = [], onKeyColorChange }: ColorPickerProps) {
     const { hasPerKeyRGB } = useDevice();
 
     const [color, setColor] = useState({ r: 255, g: 0, b: 0 });
@@ -140,6 +141,8 @@ export function ColorPicker({ definition, selectedKeyIndices = [] }: ColorPicker
                 if (ledIndices.length > 0) {
                     await hid.setPerKeyColor(ar, ag, ab, ledIndices);
                 }
+                // Update virtual keyboard visualization
+                onKeyColorChange?.(selectedKeyIndices, `rgb(${ar},${ag},${ab})`);
             } else {
                 // Global mode: convert to HSV and send via VIA protocol
                 const [h, s] = rgbToHsv(r, g, b);

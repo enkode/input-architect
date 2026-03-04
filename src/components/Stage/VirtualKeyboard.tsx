@@ -10,9 +10,10 @@ interface VirtualKeyboardProps {
     selectedKeyIndices: number[];
     onKeySelect: (index: number, isMulti: boolean) => void;
     deviceKeymap?: number[];
+    keyColors?: Record<number, string>;
 }
 
-export function VirtualKeyboard({ definition, pressedKeys, selectedKeyIndices, onKeySelect, deviceKeymap }: VirtualKeyboardProps) {
+export function VirtualKeyboard({ definition, pressedKeys, selectedKeyIndices, onKeySelect, deviceKeymap, keyColors }: VirtualKeyboardProps) {
 
     const renderableKeys = useMemo(() => {
         const result: KeyPosition[] = [];
@@ -101,23 +102,37 @@ export function VirtualKeyboard({ definition, pressedKeys, selectedKeyIndices, o
                 {finalKeys.map((key, idx) => {
                     const isSelected = selectedKeyIndices.includes(idx);
                     const isPressed = key.code && pressedKeys.includes(key.code);
+                    const keyColor = keyColors?.[idx];
+                    const isMultiLine = key.label.includes('\n');
+                    const labelParts = isMultiLine ? key.label.split('\n') : null;
+                    // Auto-size text based on label length relative to key width
+                    const plainLabel = key.label.replace('\n', '');
+                    const textClass = plainLabel.length > 7 ? 'text-[7px]'
+                        : plainLabel.length > 5 ? 'text-[9px]'
+                        : 'text-xs';
 
                     return (
                         <motion.button
                             key={key.id}
                             className={clsx(
-                                "absolute border rounded-md flex items-center justify-center text-xs font-semibold select-none transition-all duration-75",
+                                "absolute border rounded-md flex flex-col items-center justify-center font-semibold select-none transition-all duration-75 overflow-hidden",
                                 isSelected
                                     ? "bg-primary text-white border-primary shadow-[0_0_15px_rgba(247,88,33,0.5)] z-10"
                                     : isPressed
                                         ? "bg-white text-black border-white shadow-[0_0_10px_rgba(255,255,255,0.8)] z-20 scale-95"
-                                        : "bg-[#27272A] text-text-muted border-black/40 hover:border-text-secondary hover:text-text-primary"
+                                        : keyColor
+                                            ? "border-white/20 text-white/90"
+                                            : "bg-[#27272A] text-text-muted border-black/40 hover:border-text-secondary hover:text-text-primary"
                             )}
                             style={{
                                 left: `${key.x * 50}px`,
                                 top: `${key.y * 50}px`,
                                 width: `${key.w * 50 - 4}px`,
-                                height: `${key.h * 50 - 4}px`
+                                height: `${key.h * 50 - 4}px`,
+                                ...(keyColor && !isSelected && !isPressed ? {
+                                    backgroundColor: keyColor,
+                                    boxShadow: `0 0 12px ${keyColor}60`,
+                                } : {}),
                             }}
                             onClick={(e) => {
                                 e.stopPropagation();
@@ -126,7 +141,14 @@ export function VirtualKeyboard({ definition, pressedKeys, selectedKeyIndices, o
                             whileHover={{ scale: 1.05 }}
                             whileTap={{ scale: 0.95 }}
                         >
-                            {key.label}
+                            {isMultiLine && labelParts ? (
+                                <>
+                                    <span className="text-[9px] leading-none opacity-50">{labelParts[0]}</span>
+                                    <span className="text-[11px] leading-none mt-0.5">{labelParts[1]}</span>
+                                </>
+                            ) : (
+                                <span className={textClass}>{key.label}</span>
+                            )}
                         </motion.button>
                     );
                 })}

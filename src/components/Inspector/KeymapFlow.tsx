@@ -3,7 +3,7 @@ import { hid } from '../../services/HIDService';
 import type { VIAKeyboardDefinition } from '../../types/via';
 import { clsx } from 'clsx';
 import { Save } from 'lucide-react';
-import { KEYCODE_MAP, KEY_CATEGORIES, buildModKeycode, getKeyLabel } from '../../utils/keycodes';
+import { KEYCODE_MAP, KEY_CATEGORIES, buildModKeycode, getKeyLabelCompact } from '../../utils/keycodes';
 
 interface KeymapFlowProps {
     definition?: VIAKeyboardDefinition;
@@ -23,7 +23,7 @@ export function KeymapFlow({ definition, selectedKeyIndices, selectedLayer, onKe
     const handleSelectKey = (baseCode: number) => {
         // Apply modifier flags if any are toggled
         const code = noMods ? baseCode : buildModKeycode(baseCode, mods);
-        const label = getKeyLabel(code);
+        const label = getKeyLabelCompact(code);
         setPendingKeycode(code);
         setPendingLabel(label);
     };
@@ -37,7 +37,7 @@ export function KeymapFlow({ definition, selectedKeyIndices, selectedLayer, onKe
             const anyMod = newMods.ctrl || newMods.shift || newMods.alt || newMods.gui;
             const newCode = anyMod ? buildModKeycode(base, newMods) : base;
             setPendingKeycode(newCode);
-            setPendingLabel(getKeyLabel(newCode));
+            setPendingLabel(getKeyLabelCompact(newCode));
         }
     };
 
@@ -91,9 +91,9 @@ export function KeymapFlow({ definition, selectedKeyIndices, selectedLayer, onKe
 
             {/* Key grid */}
             <div className="bg-surface border border-border rounded-lg p-3">
-                <div className="grid grid-cols-4 gap-1.5 max-h-48 overflow-y-auto">
+                <div className="grid grid-cols-4 gap-1.5 max-h-72 overflow-y-auto">
                     {category.codes.map((code) => {
-                        const label = KEYCODE_MAP[code] || `0x${code.toString(16)}`;
+                        const label = (KEYCODE_MAP[code] || `0x${code.toString(16)}`).replace('\n', ' ');
                         const effectiveCode = noMods ? code : buildModKeycode(code, mods);
                         const isSelected = pendingKeycode === effectiveCode;
                         return (

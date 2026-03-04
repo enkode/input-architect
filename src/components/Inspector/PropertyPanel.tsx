@@ -19,9 +19,10 @@ interface PropertyPanelProps {
     selectedLayer?: number;
     onConfigRestore?: () => void;
     onKeymapChange?: () => void;
+    onKeyColorChange?: (indices: number[], color: string | null) => void;
 }
 
-export function PropertyPanel({ activeMode, activeDefinition, selectedModuleId, selectedModuleType, selectedKeyIndices = [], selectedLayer = 0, onConfigRestore, onKeymapChange }: PropertyPanelProps) {
+export function PropertyPanel({ activeMode, activeDefinition, selectedModuleId, selectedModuleType, selectedKeyIndices = [], selectedLayer = 0, onConfigRestore, onKeymapChange, onKeyColorChange }: PropertyPanelProps) {
     // If no module selected, we might still show generic global settings in some modes
     if (!selectedModuleId) {
         return (
@@ -73,6 +74,7 @@ export function PropertyPanel({ activeMode, activeDefinition, selectedModuleId, 
                 <ColorPicker
                     definition={activeDefinition}
                     selectedKeyIndices={selectedKeyIndices}
+                    onKeyColorChange={onKeyColorChange}
                 />
             )}
 

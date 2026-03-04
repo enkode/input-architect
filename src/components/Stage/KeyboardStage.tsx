@@ -9,9 +9,10 @@ interface KeyboardStageProps {
     selectedKeyIndices: number[];
     onKeySelect: (index: number, isMulti: boolean) => void;
     deviceKeymap?: number[];
+    keyColors?: Record<number, string>;
 }
 
-export function KeyboardStage({ definition, pressedKeys, selectedKeyIndices, onKeySelect, deviceKeymap }: KeyboardStageProps) {
+export function KeyboardStage({ definition, pressedKeys, selectedKeyIndices, onKeySelect, deviceKeymap, keyColors }: KeyboardStageProps) {
     const containerRef = useRef<HTMLDivElement>(null);
 
     return (
@@ -32,6 +33,7 @@ export function KeyboardStage({ definition, pressedKeys, selectedKeyIndices, onK
                         selectedKeyIndices={selectedKeyIndices}
                         onKeySelect={onKeySelect}
                         deviceKeymap={deviceKeymap}
+                        keyColors={keyColors}
                     />
                 </div>
             </div>

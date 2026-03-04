@@ -25,6 +25,7 @@ function App() {
 
   // Device State
   const [deviceKeymap, setDeviceKeymap] = useState<number[]>([]);
+  const [keyColors, setKeyColors] = useState<Record<number, string>>({});
 
   // Input Handling for visual feedback
   const [pressedKeys, setPressedKeys] = useState<string[]>([]);
@@ -62,6 +63,17 @@ function App() {
     setDeviceKeymap([]);
     refreshKeymap();
   }, [isConnected, selectedLayer, activeDefinition]);
+
+  const handleKeyColorChange = (indices: number[], color: string | null) => {
+    setKeyColors(prev => {
+      const next = { ...prev };
+      for (const idx of indices) {
+        if (color) next[idx] = color;
+        else delete next[idx];
+      }
+      return next;
+    });
+  };
 
   const handleKeySelect = (index: number, isMulti: boolean) => {
     setSelectedKeyIndices(prev => {
@@ -149,6 +161,7 @@ function App() {
             selectedLayer={selectedLayer}
             onConfigRestore={refreshKeymap}
             onKeymapChange={refreshKeymap}
+            onKeyColorChange={handleKeyColorChange}
           />
         ) : (
           <div className="p-4 h-full flex items-center justify-center text-text-muted text-xs">
@@ -166,6 +179,7 @@ function App() {
           selectedKeyIndices={selectedKeyIndices}
           onKeySelect={handleKeySelect}
           deviceKeymap={deviceKeymap}
+          keyColors={keyColors}
         />
       ) : (
         <div className="w-full h-full flex flex-col items-center justify-center gap-6 text-center">
