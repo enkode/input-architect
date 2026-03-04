@@ -34,6 +34,19 @@ const SUPPORTED_VIDS = [0x32AC, 0x4657];
 const RAW_HID_USAGE_PAGE = 0xFF60;
 const RAW_HID_USAGE = 0x61;
 
+export interface HealthCheckResult {
+    ok: boolean;
+    deviceOpen: boolean;
+    protocolResponds: boolean;
+    protocolVersion: number;
+    rgbReadable: boolean;
+    rgbBrightness: number | null;
+    rgbEffect: number | null;
+    rgbWriteVerify: boolean;
+    perKeySupport: boolean;
+    log: string[];
+}
+
 export class HIDService {
     private device: HIDDevice | null = null;
     private isConnected: boolean = false;
@@ -426,6 +439,116 @@ export class HIDService {
 
     getDetectedProtocolVersion(): number {
         return this.protocolVersion;
+    }
+
+    // --- Health Check ---
+
+    async healthCheck(): Promise<HealthCheckResult> {
+        const log: string[] = [];
+        const result: HealthCheckResult = {
+            ok: false,
+            deviceOpen: false,
+            protocolResponds: false,
+            protocolVersion: 0,
+            rgbReadable: false,
+            rgbBrightness: null,
+            rgbEffect: null,
+            rgbWriteVerify: false,
+            perKeySupport: this._hasPerKeySupport,
+            log,
+        };
+
+        // 1. Check device is open
+        if (!this.device || !this.device.opened) {
+            log.push('FAIL: No device connected or device not open');
+            return result;
+        }
+        result.deviceOpen = true;
+        log.push(`OK: Device open — ${this.device.productName} (PID 0x${this.device.productId.toString(16)})`);
+
+        // 2. Protocol version query
+        try {
+            const ver = await this.getProtocolVersion();
+            result.protocolVersion = ver;
+            if (ver > 0) {
+                result.protocolResponds = true;
+                log.push(`OK: VIA protocol version ${ver} (${ver >= 11 ? 'V3' : 'V2'})`);
+            } else {
+                log.push('FAIL: Protocol version query returned 0 — device not responding');
+                return result;
+            }
+        } catch (e) {
+            log.push(`FAIL: Protocol version query threw: ${e}`);
+            return result;
+        }
+
+        // 3. RGB read test
+        try {
+            result.rgbBrightness = await this.getRGBBrightness();
+            result.rgbEffect = await this.getRGBEffect();
+            const speed = await this.getRGBEffectSpeed();
+            const color = await this.getRGBColor();
+
+            if (result.rgbBrightness !== null) {
+                result.rgbReadable = true;
+                log.push(`OK: RGB brightness = ${result.rgbBrightness}`);
+            } else {
+                log.push('WARN: RGB brightness read returned null');
+            }
+            if (result.rgbEffect !== null) {
+                log.push(`OK: RGB effect = ${result.rgbEffect}`);
+            } else {
+                log.push('WARN: RGB effect read returned null');
+            }
+            log.push(`INFO: Speed = ${speed ?? 'null'}, Color HSV = ${color ? `H=${color[0]} S=${color[1]}` : 'null'}`);
+        } catch (e) {
+            log.push(`FAIL: RGB read threw: ${e}`);
+        }
+
+        // 4. RGB write + readback verify
+        if (result.rgbBrightness !== null) {
+            try {
+                const original = result.rgbBrightness;
+                // Write the same value back (non-destructive)
+                await this.setRGBBrightness(original);
+                const readback = await this.getRGBBrightness();
+                if (readback === original) {
+                    result.rgbWriteVerify = true;
+                    log.push(`OK: Write/readback verify passed (brightness ${original} → ${readback})`);
+                } else {
+                    log.push(`WARN: Write/readback mismatch (wrote ${original}, read ${readback})`);
+                }
+            } catch (e) {
+                log.push(`FAIL: Write/readback threw: ${e}`);
+            }
+        }
+
+        // 5. EEPROM save test
+        try {
+            const saveCmd = this.isV3
+                ? await this.sendCommand(VIA_CUSTOM_SAVE, [CHANNEL_RGB_MATRIX])
+                : await this.sendCommand(VIA_CUSTOM_SAVE);
+            if (!saveCmd) {
+                log.push('WARN: EEPROM save command timed out');
+            } else {
+                const byte0 = saveCmd.getUint8(0);
+                if (byte0 === 0xFF) {
+                    log.push('WARN: EEPROM save rejected by firmware (0xFF) — firmware may not support custom save');
+                } else {
+                    log.push(`OK: EEPROM save command accepted (response 0x${byte0.toString(16).padStart(2, '0')})`);
+                }
+            }
+        } catch (e) {
+            log.push(`FAIL: EEPROM save threw: ${e}`);
+        }
+
+        // 6. Per-key RGB check
+        log.push(`INFO: Per-key RGB firmware: ${this._hasPerKeySupport ? 'DETECTED' : 'not detected (stock firmware)'}`);
+
+        result.ok = result.deviceOpen && result.protocolResponds && result.rgbReadable;
+        log.push(result.ok ? 'OVERALL: Connection healthy' : 'OVERALL: Issues detected — see above');
+
+        return result;
     }
 
     // --- Device State ---

@@ -11,8 +11,10 @@ import { FRAMEWORK_MACROPAD } from './data/definitions/macropad';
 import { useDevice } from './context/DeviceContext';
 import { configService } from './services/ConfigService';
 import { storageService } from './services/StorageService';
-import { hid } from './services/HIDService';
+import { hid, type HealthCheckResult } from './services/HIDService';
 import type { VIAKeyboardDefinition } from './types/via';
+import { clsx } from 'clsx';
+import { Stethoscope, ChevronDown } from 'lucide-react';
 
 function App() {
   const { isConnected, connectDevice, switchDevice, disconnectDevice, connectedProductId, connectedProductName, protocolVersion, hasPerKeyRGB } = useDevice();
@@ -32,6 +34,11 @@ function App() {
 
   // Input Handling for visual feedback
   const [pressedKeys, setPressedKeys] = useState<string[]>([]);
+
+  // Health check
+  const [healthResult, setHealthResult] = useState<HealthCheckResult | null>(null);
+  const [healthChecking, setHealthChecking] = useState(false);
+  const [showHealthLog, setShowHealthLog] = useState(false);
 
   // Refs for auto-save debounce and per-key restore tracking
   const saveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -147,6 +154,19 @@ function App() {
     }
   };
 
+  const runHealthCheck = async () => {
+    setHealthChecking(true);
+    setShowHealthLog(true);
+    try {
+      const result = await hid.healthCheck();
+      setHealthResult(result);
+    } catch (e) {
+      console.error('Health check error:', e);
+    } finally {
+      setHealthChecking(false);
+    }
+  };
+
   const handleKeySelect = (index: number, isMulti: boolean) => {
     setSelectedKeyIndices(prev => {
       if (isMulti) {
@@ -191,6 +211,45 @@ function App() {
                     Switch Device
                   </button>
                 </div>
+                <button
+                  onClick={runHealthCheck}
+                  disabled={healthChecking}
+                  className={clsx(
+                    "w-full px-3 py-2 rounded-lg flex items-center justify-center gap-2 text-xs font-semibold transition-colors border",
+                    healthResult
+                      ? healthResult.ok
+                        ? "bg-green-500/10 text-green-400 border-green-500/20"
+                        : "bg-yellow-500/10 text-yellow-400 border-yellow-500/20"
+                      : "bg-surface-highlight text-text-muted border-border hover:border-text-secondary hover:text-text-primary",
+                    healthChecking && "opacity-50 cursor-wait"
+                  )}
+                >
+                  <Stethoscope size={14} />
+                  {healthChecking ? 'Testing...' : healthResult ? (healthResult.ok ? 'Connection OK' : 'Issues Detected') : 'Test Connection'}
+                </button>
+                {healthResult && (
+                  <div className="bg-surface border border-border rounded-lg overflow-hidden">
+                    <button
+                      onClick={() => setShowHealthLog(!showHealthLog)}
+                      className="w-full px-3 py-1.5 flex items-center gap-2 text-[10px] text-text-muted hover:text-text-primary transition-colors"
+                    >
+                      <span>Health Check Log</span>
+                      <ChevronDown size={10} className={clsx("ml-auto transition-transform", showHealthLog && "rotate-180")} />
+                    </button>
+                    {showHealthLog && (
+                      <div className="border-t border-border px-3 py-2 max-h-48 overflow-auto font-mono text-[9px] leading-relaxed bg-black/20 space-y-0.5">
+                        {healthResult.log.map((entry, i) => (
+                          <div key={i} className={clsx(
+                            entry.startsWith('FAIL') ? 'text-red-400' :
+                            entry.startsWith('WARN') ? 'text-yellow-400' :
+                            entry.startsWith('OK') ? 'text-green-400' :
+                            'text-text-muted'
+                          )}>{entry}</div>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                )}
               </>
             ) : (
               <button
