@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { MainLayout } from './layouts/MainLayout';
 import { KeyboardStage } from './components/Stage/KeyboardStage';
 import { PropertyPanel } from './components/Inspector/PropertyPanel';
@@ -10,9 +10,12 @@ import { FRAMEWORK_16_ANSI } from './data/definitions/framework16';
 import { FRAMEWORK_MACROPAD } from './data/definitions/macropad';
 import { useDevice } from './context/DeviceContext';
 import { configService } from './services/ConfigService';
+import { storageService } from './services/StorageService';
+import { hid } from './services/HIDService';
+import type { VIAKeyboardDefinition } from './types/via';
 
 function App() {
-  const { isConnected, connectDevice, switchDevice, disconnectDevice, connectedProductId, connectedProductName, protocolVersion } = useDevice();
+  const { isConnected, connectDevice, switchDevice, disconnectDevice, connectedProductId, connectedProductName, protocolVersion, hasPerKeyRGB } = useDevice();
 
   // Only select a definition when a device is actually connected
   const activeDefinition = !isConnected ? null
@@ -30,6 +33,10 @@ function App() {
   // Input Handling for visual feedback
   const [pressedKeys, setPressedKeys] = useState<string[]>([]);
 
+  // Refs for auto-save debounce and per-key restore tracking
+  const saveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const perKeyRestoredRef = useRef(false);
+
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
       if (!e.repeat) setPressedKeys(prev => [...prev, e.code]);
@@ -46,6 +53,13 @@ function App() {
     };
   }, []);
 
+  // Reset per-key restore flag on disconnect
+  useEffect(() => {
+    if (!isConnected) {
+      perKeyRestoredRef.current = false;
+    }
+  }, [isConnected]);
+
   const refreshKeymap = () => {
     if (isConnected && activeDefinition) {
       configService.readKeymap(activeDefinition, selectedLayer)
@@ -56,12 +70,51 @@ function App() {
     }
   };
 
-  // Sync Keymap on Connect/Layer Change
+  // Restore per-key colors from localStorage to device
+  const restorePerKeyColorsToDevice = async (
+    colors: Record<number, string>,
+    definition: VIAKeyboardDefinition,
+  ) => {
+    const enabled = await hid.enablePerKeyMode();
+    if (!enabled) return;
+
+    // Group keys by color to minimize HID commands
+    const colorGroups: Record<string, number[]> = {};
+    for (const [keyIdx, color] of Object.entries(colors)) {
+      if (!colorGroups[color]) colorGroups[color] = [];
+      colorGroups[color].push(Number(keyIdx));
+    }
+
+    for (const [colorStr, keyIndices] of Object.entries(colorGroups)) {
+      const match = colorStr.match(/rgb\((\d+),(\d+),(\d+)\)/);
+      if (!match) continue;
+      const [, r, g, b] = match.map(Number);
+
+      const ledIndices = keyIndices.flatMap(idx => definition.ledIndices[idx] ?? []);
+      if (ledIndices.length > 0) {
+        await hid.setPerKeyColor(r, g, b, ledIndices);
+      }
+    }
+  };
+
+  // Sync Keymap on Connect/Layer Change + auto-restore per-key colors
   useEffect(() => {
     // Clear selection and keymap when device changes
     setSelectedKeyIndices([]);
     setDeviceKeymap([]);
     refreshKeymap();
+
+    // Auto-restore per-key colors once per connection session
+    if (isConnected && !perKeyRestoredRef.current && connectedProductId !== null && activeDefinition) {
+      perKeyRestoredRef.current = true;
+      const stored = storageService.loadDeviceState(connectedProductId);
+      if (stored?.perKeyColors && Object.keys(stored.perKeyColors).length > 0) {
+        setKeyColors(stored.perKeyColors);
+        if (hasPerKeyRGB) {
+          restorePerKeyColorsToDevice(stored.perKeyColors, activeDefinition);
+        }
+      }
+    }
   }, [isConnected, selectedLayer, activeDefinition]);
 
   const handleKeyColorChange = (indices: number[], color: string | null) => {
@@ -71,8 +124,27 @@ function App() {
         if (color) next[idx] = color;
         else delete next[idx];
       }
+
+      // Debounced save to localStorage
+      if (connectedProductId !== null) {
+        if (saveTimerRef.current) clearTimeout(saveTimerRef.current);
+        saveTimerRef.current = setTimeout(() => {
+          storageService.saveDeviceState(connectedProductId!, { perKeyColors: next });
+        }, 500);
+      }
+
       return next;
     });
+  };
+
+  const handlePerKeyColorsRestore = (colors: Record<number, string>) => {
+    setKeyColors(colors);
+    if (connectedProductId !== null) {
+      storageService.saveDeviceState(connectedProductId, { perKeyColors: colors });
+    }
+    if (hasPerKeyRGB && activeDefinition) {
+      restorePerKeyColorsToDevice(colors, activeDefinition);
+    }
   };
 
   const handleKeySelect = (index: number, isMulti: boolean) => {
@@ -162,6 +234,8 @@ function App() {
             onConfigRestore={refreshKeymap}
             onKeymapChange={refreshKeymap}
             onKeyColorChange={handleKeyColorChange}
+            keyColors={keyColors}
+            onPerKeyColorsRestore={handlePerKeyColorsRestore}
           />
         ) : (
           <div className="p-4 h-full flex items-center justify-center text-text-muted text-xs">

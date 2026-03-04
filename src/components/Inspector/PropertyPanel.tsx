@@ -1,14 +1,12 @@
+import { useState } from 'react';
 import { ColorPicker } from './ColorPicker';
 import { KeymapFlow } from './KeymapFlow';
 import { RapidTriggerControl } from './RapidTriggerControl';
 import { LEDMatrixControls } from './LEDMatrixControls';
-import { Settings2, Download, Upload } from 'lucide-react';
+import { Settings2, Download, Upload, CheckCircle2 } from 'lucide-react';
 import { configService } from '../../services/ConfigService';
-import type { VIAKeyboardDefinition } from '../../types/via'; // Import Type
-
-// Removed ModuleData import to break dependency on legacy file if needed, 
-// or just define a loose contract
-// import type { ModuleData } from '../Stage/ModuleRenderer';
+import { clsx } from 'clsx';
+import type { VIAKeyboardDefinition } from '../../types/via';
 
 interface PropertyPanelProps {
     activeMode: 'mapping' | 'lighting' | 'macros' | 'settings';
@@ -20,9 +18,14 @@ interface PropertyPanelProps {
     onConfigRestore?: () => void;
     onKeymapChange?: () => void;
     onKeyColorChange?: (indices: number[], color: string | null) => void;
+    keyColors?: Record<number, string>;
+    onPerKeyColorsRestore?: (colors: Record<number, string>) => void;
 }
 
-export function PropertyPanel({ activeMode, activeDefinition, selectedModuleId, selectedModuleType, selectedKeyIndices = [], selectedLayer = 0, onConfigRestore, onKeymapChange, onKeyColorChange }: PropertyPanelProps) {
+export function PropertyPanel({ activeMode, activeDefinition, selectedModuleId, selectedModuleType, selectedKeyIndices = [], selectedLayer = 0, onConfigRestore, onKeymapChange, onKeyColorChange, keyColors, onPerKeyColorsRestore }: PropertyPanelProps) {
+    const [backupState, setBackupState] = useState<'idle' | 'backing-up' | 'done' | 'error'>('idle');
+    const [backupProgress, setBackupProgress] = useState(0);
+
     // If no module selected, we might still show generic global settings in some modes
     if (!selectedModuleId) {
         return (
@@ -44,6 +47,63 @@ export function PropertyPanel({ activeMode, activeDefinition, selectedModuleId, 
             </div>
         );
     }
+
+    const handleBackup = async () => {
+        if (!activeDefinition || backupState === 'backing-up') return;
+        setBackupState('backing-up');
+        setBackupProgress(0);
+        try {
+            const cfg = await configService.backupConfig(
+                activeDefinition,
+                keyColors,
+                (layer, total) => setBackupProgress(Math.round(((layer + 1) / total) * 100)),
+            );
+            if (cfg) {
+                const blob = new Blob([JSON.stringify(cfg, null, 2)], { type: 'application/json' });
+                const url = URL.createObjectURL(blob);
+                const a = document.createElement('a');
+                a.href = url;
+                a.download = `framework-config-${Date.now()}.json`;
+                a.click();
+                URL.revokeObjectURL(url);
+                setBackupState('done');
+                setTimeout(() => setBackupState('idle'), 2000);
+            } else {
+                alert("Backup failed. Is a device connected?");
+                setBackupState('error');
+                setTimeout(() => setBackupState('idle'), 2000);
+            }
+        } catch (err) {
+            console.error('Backup failed:', err);
+            setBackupState('error');
+            setTimeout(() => setBackupState('idle'), 2000);
+        }
+    };
+
+    const handleRestore = () => {
+        const input = document.createElement('input');
+        input.type = 'file';
+        input.accept = '.json';
+        input.onchange = async (e: Event) => {
+            const file = (e.target as HTMLInputElement).files?.[0];
+            if (!file) return;
+            const text = await file.text();
+            try {
+                const json = JSON.parse(text);
+                if (!activeDefinition) return;
+                const result = await configService.restoreConfig(json, activeDefinition);
+                if (result.success) {
+                    if (result.perKeyColors && onPerKeyColorsRestore) {
+                        onPerKeyColorsRestore(result.perKeyColors);
+                    }
+                    onConfigRestore?.();
+                }
+            } catch {
+                alert("Invalid Config File");
+            }
+        };
+        input.click();
+    };
 
     // Keyboard Logic (Default)
     return (
@@ -92,48 +152,39 @@ export function PropertyPanel({ activeMode, activeDefinition, selectedModuleId, 
                             Backup & Restore
                         </h3>
                         <p className="text-[10px] text-text-muted">
-                            Save your keymap configuration to a file or restore from a backup.
+                            Export your full configuration (all 6 layers, RGB settings, per-key colors) to a file, or restore from a backup.
                         </p>
                         <div className="flex gap-2">
                             <button
-                                onClick={async () => {
-                                    const cfg = await configService.backupConfig();
-                                    if (cfg) {
-                                        const blob = new Blob([JSON.stringify(cfg, null, 2)], { type: 'application/json' });
-                                        const url = URL.createObjectURL(blob);
-                                        const a = document.createElement('a');
-                                        a.href = url;
-                                        a.download = `framework-config-${Date.now()}.json`;
-                                        a.click();
-                                    }
-                                }}
-                                className="flex-1 bg-surface-highlight hover:bg-primary hover:text-white transition-colors py-2 rounded text-xs flex items-center justify-center gap-2"
+                                onClick={handleBackup}
+                                disabled={backupState === 'backing-up'}
+                                className={clsx(
+                                    "flex-1 py-2 rounded text-xs flex items-center justify-center gap-2 transition-colors",
+                                    backupState === 'done'
+                                        ? "bg-green-600 text-white"
+                                        : backupState === 'backing-up'
+                                            ? "bg-surface-highlight text-text-muted cursor-wait"
+                                            : "bg-surface-highlight hover:bg-primary hover:text-white"
+                                )}
                             >
-                                <Download size={14} /> Backup
+                                {backupState === 'backing-up' ? (
+                                    <>
+                                        <Download size={14} className="animate-pulse" />
+                                        Reading... {backupProgress}%
+                                    </>
+                                ) : backupState === 'done' ? (
+                                    <>
+                                        <CheckCircle2 size={14} />
+                                        Saved!
+                                    </>
+                                ) : (
+                                    <>
+                                        <Download size={14} /> Backup
+                                    </>
+                                )}
                             </button>
                             <button
-                                onClick={() => {
-                                    const input = document.createElement('input');
-                                    input.type = 'file';
-                                    input.accept = '.json';
-                                    input.onchange = async (e: Event) => {
-                                        const file = (e.target as HTMLInputElement).files?.[0];
-                                        if (!file) return;
-                                        const text = await file.text();
-                                        try {
-                                            const json = JSON.parse(text);
-                                            const success = activeDefinition
-                                                ? await configService.restoreConfig(json, activeDefinition)
-                                                : false;
-                                            if (success && onConfigRestore) {
-                                                onConfigRestore();
-                                            }
-                                        } catch {
-                                            alert("Invalid Config File");
-                                        }
-                                    };
-                                    input.click();
-                                }}
+                                onClick={handleRestore}
                                 className="flex-1 bg-surface-highlight hover:bg-primary hover:text-white transition-colors py-2 rounded text-xs flex items-center justify-center gap-2"
                             >
                                 <Upload size={14} /> Restore

@@ -65,6 +65,7 @@ export function ColorPicker({ definition, selectedKeyIndices = [], onKeyColorCha
     const [perKeyEnabling, setPerKeyEnabling] = useState(false);
     const [perKeyBrightness, setPerKeyBrightness] = useState(255);
     const [saveState, setSaveState] = useState<'idle' | 'saving' | 'saved' | 'error'>('idle');
+    const [hasUnsavedChanges, setHasUnsavedChanges] = useState(false);
     const [diagLog, setDiagLog] = useState<string[]>([]);
     const [showDiag, setShowDiag] = useState(false);
 
@@ -163,6 +164,7 @@ export function ColorPicker({ definition, selectedKeyIndices = [], onKeyColorCha
     const handleColorChange = (key: 'r' | 'g' | 'b', val: number) => {
         const newColor = { ...color, [key]: val };
         setColor(newColor);
+        if (!isPerKeyMode) setHasUnsavedChanges(true);
         sendColorUpdate(newColor.r, newColor.g, newColor.b);
     };
 
@@ -192,18 +194,21 @@ export function ColorPicker({ definition, selectedKeyIndices = [], onKeyColorCha
 
     const handleBrightnessChange = (val: number) => {
         setBrightness(val);
+        setHasUnsavedChanges(true);
         hid.setRGBBrightness(val).catch(err => log(`Brightness set failed: ${err}`));
     };
 
     const handleEffectChange = (id: number) => {
         setEffectId(id);
         setEffectDropdownOpen(false);
+        setHasUnsavedChanges(true);
         log(`Setting effect to ${id}`);
         hid.setRGBEffect(id).catch(err => log(`Effect set failed: ${err}`));
     };
 
     const handleSpeedChange = (val: number) => {
         setSpeed(val);
+        setHasUnsavedChanges(true);
         hid.setRGBEffectSpeed(val).catch(err => log(`Speed set failed: ${err}`));
     };
 
@@ -224,6 +229,7 @@ export function ColorPicker({ definition, selectedKeyIndices = [], onKeyColorCha
             if (ok) {
                 log('Save SUCCESS');
                 setSaveState('saved');
+                setHasUnsavedChanges(false);
                 setTimeout(() => setSaveState('idle'), 2000);
             } else {
                 log('Save FAILED — see details above');
@@ -441,7 +447,10 @@ export function ColorPicker({ definition, selectedKeyIndices = [], onKeyColorCha
                     ) : saveState === 'saving' ? (
                         <><Save size={14} /> Saving...</>
                     ) : (
-                        <><Save size={14} /> Save to Device</>
+                        <>
+                            {hasUnsavedChanges && <span className="w-2 h-2 rounded-full bg-yellow-400 animate-pulse" />}
+                            <Save size={14} /> Save to Device
+                        </>
                     )}
                 </button>
                 <button
