@@ -218,13 +218,13 @@ export function ColorPicker({ definition, selectedKeyIndices = [] }: ColorPicker
                 speed,
                 hue: h,
                 saturation: s,
-            });
+            }, log);
             if (ok) {
-                log('Save SUCCESS — EEPROM write verified');
+                log('Save SUCCESS');
                 setSaveState('saved');
                 setTimeout(() => setSaveState('idle'), 2000);
             } else {
-                log('Save FAILED — device rejected or verify mismatch');
+                log('Save FAILED — see details above');
                 setSaveState('error');
                 setTimeout(() => setSaveState('idle'), 3000);
             }
