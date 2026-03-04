@@ -35,13 +35,13 @@ export function VirtualKeyboard({ definition, pressedKeys, selectedKeyIndices, o
                 } else {
                     // Look up matrix position and LED index from definition
                     const matrixPos = definition.matrixPositions[keyCounter];
-                    const ledIdx = definition.ledIndices[keyCounter];
+                    const ledArr = definition.ledIndices[keyCounter];
 
                     result.push({
                         index: keyCounter,
                         matrixRow: matrixPos ? matrixPos[0] : 0,
                         matrixCol: matrixPos ? matrixPos[1] : 0,
-                        ledIndex: ledIdx ?? -1,
+                        ledIndices: ledArr ?? [],
                         id: `k-${keyCounter}`,
                         x: x,
                         y: y,

@@ -136,8 +136,7 @@ export function ColorPicker({ definition, selectedKeyIndices = [] }: ColorPicker
                 const ag = Math.round(g * scale);
                 const ab = Math.round(b * scale);
                 const ledIndices = selectedKeyIndices
-                    .map(idx => definition.ledIndices[idx])
-                    .filter(idx => idx >= 0);
+                    .flatMap(idx => definition.ledIndices[idx] ?? []);
                 if (ledIndices.length > 0) {
                     await hid.setPerKeyColor(ar, ag, ab, ledIndices);
                 }

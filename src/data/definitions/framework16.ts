@@ -31,21 +31,34 @@ export const FRAMEWORK_16_ANSI: VIAKeyboardDefinition = {
         [1,12], [2,2], [3,1], [1,3], [1,4], [0,3], [0,12], [6,11], [1,13], [1,8], [2,15],
     ],
 
-    // LED index for each key (-1 = no LED)
+    // LED indices for each key ([] = no LED, multiple entries for large keys)
     // Looked up from g_led_config matrix in ansi.c
+    // Large keys have extra LEDs mapped by physical position proximity
     ledIndices: [
-        // F-row
-        25, 21, 19, 18, 20, 22, 24, 26, 67, 74, 68, 66, 70, 73,
-        // Number row
-        16, 15, 13, 12, 11, 9, 14, 10, 17, 69, 61, 63, 62, 65,
-        // QWERTY
-        1, 5, 3, 2, 4, 7, 8, 6, 58, 59, 60, 57, 54, 55,
-        // Home row
-        44, 36, 41, 37, 43, 39, 40, 49, 50, 51, 48, 52, 56,
-        // Shift row
-        32, 27, 29, 31, 33, 35, 76, 77, 78, 75, 79, 92,
-        // Bottom row
-        34, 93, 46, 47, 94, 84, 88, 89, 81, 90, 91,
+        // F-row (14 keys)
+        [25, 23],  // Esc (1.25u)
+        [21], [19], [18], [20], [22], [24], [26], [67], [74], [68], [66], [70],
+        [73, 72],  // Del (1.75u)
+        // Number row (14 keys)
+        [16], [15], [13], [12], [11], [9], [14], [10], [17], [69], [61], [63], [62],
+        [65, 64],  // Backspace (2u)
+        // QWERTY (14 keys)
+        [1, 0],    // Tab (1.5u)
+        [5], [3], [2], [4], [7], [8], [6], [58], [59], [60], [57], [54], [55],
+        // Home row (13 keys)
+        [44, 38, 42],  // Caps Lock (1.75u)
+        [36], [41], [37], [43], [39], [40], [49], [50], [51], [48], [52],
+        [56, 53],      // Enter (2.5u)
+        // Shift row (12 keys)
+        [32, 28, 30],  // LShift (2.5u)
+        [27], [29], [31], [33], [35], [76], [77], [78], [75], [79],
+        [92, 80, 82, 83],  // RShift (3u)
+        // Bottom row (11 keys)
+        [34, 45],  // LCtrl (1.25u)
+        [93], [46], [47],
+        [94, 85, 86, 87, 95, 96],  // Space (6u)
+        [84], [88],
+        [89], [81], [90], [91],    // Arrow keys (1.25u each)
     ],
 
     layouts: {

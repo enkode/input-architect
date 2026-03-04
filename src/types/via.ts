@@ -10,8 +10,9 @@ export interface VIAKeyboardDefinition {
     ledCount: number;
     // Maps each key index to its matrix [row, col] for HID commands
     matrixPositions: [number, number][];
-    // Maps each key index to its LED index for per-key RGB (-1 = no LED)
-    ledIndices: number[];
+    // Maps each key index to its LED indices for per-key RGB ([] = no LED)
+    // Large keys (space, shift, etc.) have multiple LEDs
+    ledIndices: number[][];
     layouts: {
         keymap: (string | number | { w?: number, h?: number, x?: number, y?: number, code?: string })[][];
         labels?: string[][];
@@ -23,7 +24,7 @@ export interface KeyPosition {
     index: number;       // Sequential key index
     matrixRow: number;   // Matrix row for HID commands
     matrixCol: number;   // Matrix col for HID commands
-    ledIndex: number;    // LED index for per-key RGB (-1 = no LED)
+    ledIndices: number[];  // LED indices for per-key RGB ([] = no LED, multi-LED for large keys)
     id: string;
     x: number;           // Visual X
     y: number;           // Visual Y
