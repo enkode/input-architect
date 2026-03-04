@@ -376,15 +376,18 @@ export function downloadBuildScript(): void {
     const script = generateBuildScript();
     // Ensure Windows (CRLF) line endings for cmd.exe compatibility
     const winScript = script.replace(/\n/g, '\r\n');
-    const blob = new Blob([winScript], { type: 'text/plain' });
+    const blob = new Blob([winScript], { type: 'application/octet-stream' });
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
     a.href = url;
     a.download = 'build-firmware.cmd';
     document.body.appendChild(a);
     a.click();
-    document.body.removeChild(a);
-    URL.revokeObjectURL(url);
+    // Delay cleanup to ensure download initiates before URL is revoked
+    setTimeout(() => {
+        document.body.removeChild(a);
+        URL.revokeObjectURL(url);
+    }, 150);
 }
 
 export { BUILD_TARGETS };

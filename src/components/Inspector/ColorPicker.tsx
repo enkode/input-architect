@@ -2,7 +2,7 @@ import { useState, useRef, useEffect } from 'react';
 import { hid } from '../../services/HIDService';
 import { useDevice } from '../../context/DeviceContext';
 import { FRAMEWORK_RGB_EFFECTS } from '../../data/definitions/framework16';
-import { Save, ChevronDown, CheckCircle2 } from 'lucide-react';
+import { Save, ChevronDown, CheckCircle2, RefreshCw, Terminal } from 'lucide-react';
 import { clsx } from 'clsx';
 import type { VIAKeyboardDefinition } from '../../types/via';
 
@@ -64,33 +64,61 @@ export function ColorPicker({ definition, selectedKeyIndices = [] }: ColorPicker
     const [perKeyEnabling, setPerKeyEnabling] = useState(false);
     const [perKeyBrightness, setPerKeyBrightness] = useState(255);
     const [saveState, setSaveState] = useState<'idle' | 'saving' | 'saved' | 'error'>('idle');
+    const [diagLog, setDiagLog] = useState<string[]>([]);
+    const [showDiag, setShowDiag] = useState(false);
 
     const isSending = useRef(false);
     const pendingColor = useRef<{ r: number; g: number; b: number } | null>(null);
 
     const hasSelectedKeys = selectedKeyIndices.length > 0;
 
+    const log = (msg: string) => {
+        const ts = new Date().toLocaleTimeString('en-US', { hour12: false, hour: '2-digit', minute: '2-digit', second: '2-digit' });
+        const entry = `[${ts}] ${msg}`;
+        console.log(entry);
+        setDiagLog(prev => [...prev.slice(-49), entry]);
+    };
+
+    const readDeviceState = async () => {
+        if (!hid.isDeviceConnected()) {
+            log('ERROR: No device connected');
+            return;
+        }
+        log('Reading lighting state from device...');
+        try {
+            const b = await hid.getRGBBrightness();
+            log(`  Brightness: ${b ?? 'null (no response)'}`);
+            const e = await hid.getRGBEffect();
+            log(`  Effect: ${e ?? 'null (no response)'}`);
+            const s = await hid.getRGBEffectSpeed();
+            log(`  Speed: ${s ?? 'null (no response)'}`);
+            const c = await hid.getRGBColor();
+            log(`  Color (HSV): ${c ? `H=${c[0]}, S=${c[1]}` : 'null (no response)'}`);
+
+            if (b !== null) setBrightness(b);
+            if (e !== null) setEffectId(e);
+            if (s !== null) setSpeed(s);
+            if (c !== null) {
+                const [r, g, b2] = hsvToRgb(c[0], c[1], 255);
+                setColor({ r, g, b: b2 });
+                log(`  Color (RGB): R=${r}, G=${g}, B=${b2}`);
+            }
+
+            if (b === null && e === null && s === null && c === null) {
+                log('WARNING: All reads returned null — device may not be responding to VIA commands');
+            } else {
+                log('Read complete');
+            }
+        } catch (err) {
+            log(`ERROR: ${err}`);
+        }
+    };
+
     // Read current lighting state from device on mount
     useEffect(() => {
         if (!hid.isDeviceConnected()) return;
-        (async () => {
-            try {
-                const b = await hid.getRGBBrightness();
-                const e = await hid.getRGBEffect();
-                const s = await hid.getRGBEffectSpeed();
-                const c = await hid.getRGBColor();
-                console.log(`RGB State Read: brightness=${b}, effect=${e}, speed=${s}, color=${JSON.stringify(c)}`);
-                if (b !== null) setBrightness(b);
-                if (e !== null) setEffectId(e);
-                if (s !== null) setSpeed(s);
-                if (c !== null) {
-                    const [r, g, b2] = hsvToRgb(c[0], c[1], 255);
-                    setColor({ r, g: g, b: b2 });
-                }
-            } catch (err) {
-                console.error("Failed to read lighting state:", err);
-            }
-        })();
+        readDeviceState();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
     }, []);
 
 
@@ -162,26 +190,28 @@ export function ColorPicker({ definition, selectedKeyIndices = [] }: ColorPicker
 
     const handleBrightnessChange = (val: number) => {
         setBrightness(val);
-        hid.setRGBBrightness(val).catch(console.error);
+        hid.setRGBBrightness(val).catch(err => log(`Brightness set failed: ${err}`));
     };
 
     const handleEffectChange = (id: number) => {
         setEffectId(id);
         setEffectDropdownOpen(false);
-        hid.setRGBEffect(id).catch(console.error);
+        log(`Setting effect to ${id}`);
+        hid.setRGBEffect(id).catch(err => log(`Effect set failed: ${err}`));
     };
 
     const handleSpeedChange = (val: number) => {
         setSpeed(val);
-        hid.setRGBEffectSpeed(val).catch(console.error);
+        hid.setRGBEffectSpeed(val).catch(err => log(`Speed set failed: ${err}`));
     };
 
     const handleSave = async () => {
         if (saveState === 'saving') return;
         setSaveState('saving');
+        log(`Saving: brightness=${brightness}, effect=${effectId}, speed=${speed}, color=RGB(${color.r},${color.g},${color.b})`);
         try {
-            // Convert current RGB color to HSV for the save payload
             const [h, s] = rgbToHsv(color.r, color.g, color.b);
+            log(`  HSV: H=${h}, S=${s}`);
             const ok = await hid.saveRGBSettings({
                 brightness,
                 effectId,
@@ -190,14 +220,16 @@ export function ColorPicker({ definition, selectedKeyIndices = [] }: ColorPicker
                 saturation: s,
             });
             if (ok) {
+                log('Save SUCCESS — EEPROM write verified');
                 setSaveState('saved');
                 setTimeout(() => setSaveState('idle'), 2000);
             } else {
+                log('Save FAILED — device rejected or verify mismatch');
                 setSaveState('error');
                 setTimeout(() => setSaveState('idle'), 3000);
             }
         } catch (err) {
-            console.error('Save failed:', err);
+            log(`Save ERROR: ${err}`);
             setSaveState('error');
             setTimeout(() => setSaveState('idle'), 3000);
         }
@@ -385,30 +417,67 @@ export function ColorPicker({ definition, selectedKeyIndices = [] }: ColorPicker
                 </div>
             )}
 
-            {/* Save button */}
-            <button
-                onClick={handleSave}
-                disabled={saveState === 'saving'}
-                className={clsx(
-                    "w-full py-2 rounded-lg font-bold text-xs tracking-wide flex items-center justify-center gap-2 transition-all",
-                    saveState === 'saved'
-                        ? 'bg-green-600 text-white'
-                        : saveState === 'error'
-                            ? 'bg-red-600 text-white'
-                            : 'bg-surface-highlight hover:bg-primary hover:text-white',
-                    saveState === 'saving' && 'opacity-50 cursor-wait'
+            {/* Save & Refresh buttons */}
+            <div className="flex gap-2">
+                <button
+                    onClick={handleSave}
+                    disabled={saveState === 'saving'}
+                    className={clsx(
+                        "flex-1 py-2 rounded-lg font-bold text-xs tracking-wide flex items-center justify-center gap-2 transition-all",
+                        saveState === 'saved'
+                            ? 'bg-green-600 text-white'
+                            : saveState === 'error'
+                                ? 'bg-red-600 text-white'
+                                : 'bg-surface-highlight hover:bg-primary hover:text-white',
+                        saveState === 'saving' && 'opacity-50 cursor-wait'
+                    )}
+                >
+                    {saveState === 'saved' ? (
+                        <><CheckCircle2 size={14} /> Saved!</>
+                    ) : saveState === 'error' ? (
+                        <><Save size={14} /> Save Failed</>
+                    ) : saveState === 'saving' ? (
+                        <><Save size={14} /> Saving...</>
+                    ) : (
+                        <><Save size={14} /> Save to Device</>
+                    )}
+                </button>
+                <button
+                    onClick={readDeviceState}
+                    title="Read current state from device"
+                    className="px-3 py-2 rounded-lg text-xs bg-surface-highlight hover:bg-primary hover:text-white transition-all"
+                >
+                    <RefreshCw size={14} />
+                </button>
+            </div>
+
+            {/* Diagnostic Log */}
+            <div className="bg-surface border border-border rounded-lg overflow-hidden">
+                <button
+                    onClick={() => setShowDiag(!showDiag)}
+                    className="w-full px-3 py-2 flex items-center gap-2 text-[10px] text-text-muted hover:text-text-primary transition-colors"
+                >
+                    <Terminal size={12} />
+                    <span>Diagnostics</span>
+                    <ChevronDown size={12} className={clsx("ml-auto transition-transform", showDiag && "rotate-180")} />
+                </button>
+                {showDiag && (
+                    <div className="border-t border-border px-3 py-2 max-h-40 overflow-auto font-mono text-[9px] leading-relaxed text-text-muted bg-black/20 space-y-0.5">
+                        {diagLog.length === 0 ? (
+                            <div className="text-text-muted/50 italic">No log entries yet. Try clicking the refresh button.</div>
+                        ) : (
+                            diagLog.map((entry, i) => (
+                                <div key={i} className={clsx(
+                                    entry.includes('ERROR') || entry.includes('FAILED') ? 'text-red-400' :
+                                    entry.includes('WARNING') ? 'text-yellow-400' :
+                                    entry.includes('SUCCESS') ? 'text-green-400' :
+                                    'text-text-muted'
+                                )}>{entry}</div>
+                            ))
+                        )}
+                    </div>
                 )}
-            >
-                {saveState === 'saved' ? (
-                    <><CheckCircle2 size={14} /> Saved!</>
-                ) : saveState === 'error' ? (
-                    <><Save size={14} /> Save Failed</>
-                ) : saveState === 'saving' ? (
-                    <><Save size={14} /> Saving...</>
-                ) : (
-                    <><Save size={14} /> Save to Device</>
-                )}
-            </button>
+            </div>
         </div>
     );
 }
