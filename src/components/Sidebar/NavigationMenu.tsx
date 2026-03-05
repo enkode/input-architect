@@ -1,7 +1,7 @@
 import { clsx } from 'clsx';
-import { Keyboard, Lightbulb, Play, HardDriveDownload } from 'lucide-react';
+import { Keyboard, Lightbulb, HardDriveDownload } from 'lucide-react';
 
-export type AppMode = 'mapping' | 'lighting' | 'macros' | 'settings' | 'firmware';
+export type AppMode = 'mapping' | 'lighting' | 'settings' | 'firmware';
 
 interface NavigationMenuProps {
     activeMode: AppMode;
@@ -12,7 +12,6 @@ export function NavigationMenu({ activeMode, onModeSelect }: NavigationMenuProps
     const items = [
         { id: 'mapping', label: 'Key Mapping', icon: Keyboard },
         { id: 'lighting', label: 'Lighting', icon: Lightbulb },
-        { id: 'macros', label: 'Macros', icon: Play },
         { id: 'firmware', label: 'Firmware', icon: HardDriveDownload },
     ] as const;
 

@@ -9,7 +9,7 @@ import { clsx } from 'clsx';
 import type { VIAKeyboardDefinition } from '../../types/via';
 
 interface PropertyPanelProps {
-    activeMode: 'mapping' | 'lighting' | 'macros' | 'settings';
+    activeMode: 'mapping' | 'lighting' | 'settings';
     activeDefinition?: VIAKeyboardDefinition;
     selectedModuleId: string | null;
     selectedModuleType: 'keyboard' | 'numpad' | 'led-matrix' | null;
@@ -110,7 +110,7 @@ export function PropertyPanel({ activeMode, activeDefinition, selectedModuleId, 
         <div className="p-4 space-y-4 h-full">
             <div className="flex items-center justify-between mb-2">
                 <h2 className="text-xs font-bold text-primary uppercase tracking-widest border-b border-primary/30 pb-1">
-                    {activeMode === 'mapping' ? 'Key Mapping' : activeMode === 'lighting' ? 'Lighting' : 'Macros'}
+                    {activeMode === 'mapping' ? 'Key Mapping' : 'Lighting'}
                 </h2>
                 <span className="text-[10px] font-mono text-text-muted">
                     {selectedModuleId.toUpperCase()}
@@ -136,12 +136,6 @@ export function PropertyPanel({ activeMode, activeDefinition, selectedModuleId, 
                     selectedKeyIndices={selectedKeyIndices}
                     onKeyColorChange={onKeyColorChange}
                 />
-            )}
-
-            {activeMode === 'macros' && (
-                <div className="text-sm text-text-muted text-center py-10 border-2 border-dashed border-border rounded-lg">
-                    Macro Recording Interface<br />(Coming Soon)
-                </div>
             )}
 
             {activeMode === 'settings' && (

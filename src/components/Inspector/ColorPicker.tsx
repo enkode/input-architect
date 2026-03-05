@@ -2,7 +2,7 @@ import { useState, useRef, useEffect } from 'react';
 import { hid } from '../../services/HIDService';
 import { useDevice } from '../../context/DeviceContext';
 import { FRAMEWORK_RGB_EFFECTS } from '../../data/definitions/framework16';
-import { Save, ChevronDown, CheckCircle2, RefreshCw, Terminal } from 'lucide-react';
+import { Save, ChevronDown, CheckCircle2, RefreshCw, Terminal, Zap, RotateCcw } from 'lucide-react';
 import { clsx } from 'clsx';
 import type { VIAKeyboardDefinition } from '../../types/via';
 
@@ -68,6 +68,8 @@ export function ColorPicker({ definition, selectedKeyIndices = [], onKeyColorCha
     const [hasUnsavedChanges, setHasUnsavedChanges] = useState(false);
     const [diagLog, setDiagLog] = useState<string[]>([]);
     const [showDiag, setShowDiag] = useState(false);
+    const [testingLeds, setTestingLeds] = useState(false);
+    const [resettingLeds, setResettingLeds] = useState(false);
 
     const isSending = useRef(false);
     const pendingColor = useRef<{ r: number; g: number; b: number } | null>(null);
@@ -240,6 +242,102 @@ export function ColorPicker({ definition, selectedKeyIndices = [], onKeyColorCha
             log(`Save ERROR: ${err}`);
             setSaveState('error');
             setTimeout(() => setSaveState('idle'), 3000);
+        }
+    };
+
+    const handleTestLeds = async () => {
+        if (testingLeds) return;
+        setTestingLeds(true);
+        log('LED Test: Flashing all LEDs white...');
+        try {
+            // Save current values
+            const origBrightness = await hid.getRGBBrightness();
+            const origEffect = await hid.getRGBEffect();
+            const origColor = await hid.getRGBColor();
+
+            // Flash bright white (HSV: H=0, S=0 = white)
+            await hid.setRGBBrightness(255);
+            await hid.setRGBEffect(1); // Solid color
+            await hid.setRGBColor(0, 0); // White
+            log('  LEDs set to full white — check your keyboard');
+
+            // Hold for 2 seconds
+            await new Promise(res => setTimeout(res, 2000));
+
+            // Flash red
+            await hid.setRGBColor(0, 255); // Red (H=0, S=255)
+            log('  Flashing red...');
+            await new Promise(res => setTimeout(res, 1000));
+
+            // Flash green
+            await hid.setRGBColor(85, 255); // Green (H=85 ≈ 120°)
+            log('  Flashing green...');
+            await new Promise(res => setTimeout(res, 1000));
+
+            // Flash blue
+            await hid.setRGBColor(170, 255); // Blue (H=170 ≈ 240°)
+            log('  Flashing blue...');
+            await new Promise(res => setTimeout(res, 1000));
+
+            // Restore original values
+            if (origBrightness !== null) await hid.setRGBBrightness(origBrightness);
+            if (origEffect !== null) await hid.setRGBEffect(origEffect);
+            if (origColor !== null) await hid.setRGBColor(origColor[0], origColor[1]);
+            log('LED Test complete — original settings restored');
+
+            // Sync UI state back
+            if (origBrightness !== null) setBrightness(origBrightness);
+            if (origEffect !== null) setEffectId(origEffect);
+            if (origColor !== null) {
+                const [r, g, b2] = hsvToRgb(origColor[0], origColor[1], 255);
+                setColor({ r, g, b: b2 });
+            }
+        } catch (err) {
+            log(`LED Test ERROR: ${err}`);
+        } finally {
+            setTestingLeds(false);
+        }
+    };
+
+    const handleResetLighting = async () => {
+        if (resettingLeds) return;
+        setResettingLeds(true);
+        log('Resetting lighting to defaults...');
+        try {
+            // Set known-good defaults: max brightness, solid color, medium speed, red
+            const defaults = {
+                brightness: 255,
+                effectId: 1,
+                speed: 128,
+                hue: 0,
+                saturation: 255,
+            };
+
+            await hid.setRGBBrightness(defaults.brightness);
+            await hid.setRGBEffect(defaults.effectId);
+            await hid.setRGBEffectSpeed(defaults.speed);
+            await hid.setRGBColor(defaults.hue, defaults.saturation);
+            log('  RAM values set to defaults');
+
+            // Save to EEPROM so it persists
+            const ok = await hid.saveRGBSettings(defaults, log);
+            if (ok) {
+                log('Reset complete — defaults saved to EEPROM');
+            } else {
+                log('Reset applied to RAM but EEPROM save may have failed');
+            }
+
+            // Update UI to match
+            setBrightness(defaults.brightness);
+            setEffectId(defaults.effectId);
+            setSpeed(defaults.speed);
+            const [r, g, b2] = hsvToRgb(defaults.hue, defaults.saturation, 255);
+            setColor({ r, g, b: b2 });
+            setHasUnsavedChanges(false);
+        } catch (err) {
+            log(`Reset ERROR: ${err}`);
+        } finally {
+            setResettingLeds(false);
         }
     };
 
@@ -459,6 +557,36 @@ export function ColorPicker({ definition, selectedKeyIndices = [], onKeyColorCha
                     className="px-3 py-2 rounded-lg text-xs bg-surface-highlight hover:bg-primary hover:text-white transition-all"
                 >
                     <RefreshCw size={14} />
+                </button>
+            </div>
+
+            {/* Test & Reset */}
+            <div className="flex gap-2">
+                <button
+                    onClick={handleTestLeds}
+                    disabled={testingLeds}
+                    className={clsx(
+                        "flex-1 py-2 rounded-lg font-bold text-xs tracking-wide flex items-center justify-center gap-2 transition-all",
+                        testingLeds
+                            ? "bg-yellow-500/20 text-yellow-400 cursor-wait"
+                            : "bg-surface-highlight hover:bg-yellow-500/20 hover:text-yellow-400"
+                    )}
+                >
+                    <Zap size={14} />
+                    {testingLeds ? 'Flashing...' : 'Test LEDs'}
+                </button>
+                <button
+                    onClick={handleResetLighting}
+                    disabled={resettingLeds}
+                    className={clsx(
+                        "flex-1 py-2 rounded-lg font-bold text-xs tracking-wide flex items-center justify-center gap-2 transition-all",
+                        resettingLeds
+                            ? "bg-orange-500/20 text-orange-400 cursor-wait"
+                            : "bg-surface-highlight hover:bg-orange-500/20 hover:text-orange-400"
+                    )}
+                >
+                    <RotateCcw size={14} />
+                    {resettingLeds ? 'Resetting...' : 'Reset Lights'}
                 </button>
             </div>
 
