@@ -14,10 +14,12 @@ import { storageService } from './services/StorageService';
 import { hid, type HealthCheckResult } from './services/HIDService';
 import type { VIAKeyboardDefinition } from './types/via';
 import { clsx } from 'clsx';
-import { Stethoscope, ChevronDown } from 'lucide-react';
+import { Stethoscope, ChevronDown, Plus } from 'lucide-react';
 
 function App() {
-  const { isConnected, connectDevice, switchDevice, disconnectDevice, connectedProductId, connectedProductName, protocolVersion, hasPerKeyRGB } = useDevice();
+  const { isConnected, isConnecting, connectDevice, connectToDevice, switchDevice, disconnectDevice, connectedProductId, connectedProductName, protocolVersion, hasPerKeyRGB, permittedDevices } = useDevice();
+
+  const otherDevices = permittedDevices.filter(d => d.productId !== connectedProductId);
 
   // Only select a definition when a device is actually connected
   const activeDefinition = !isConnected ? null
@@ -216,20 +218,32 @@ function App() {
                     <div className="text-[10px] text-green-400/50 font-mono">VIA Protocol: {protocolVersion} ({protocolVersion >= 11 ? 'V3' : 'V2'})</div>
                   )}
                 </div>
-                <div className="flex gap-2">
+                <button
+                  onClick={disconnectDevice}
+                  className="w-full px-3 py-2 rounded-lg bg-red-500/10 text-red-400 border border-red-500/20 hover:bg-red-500/20 transition-colors text-xs font-semibold"
+                >
+                  Disconnect
+                </button>
+                {otherDevices.map(device => (
                   <button
-                    onClick={disconnectDevice}
-                    className="flex-1 px-3 py-2 rounded-lg bg-red-500/10 text-red-400 border border-red-500/20 hover:bg-red-500/20 transition-colors text-xs font-semibold"
+                    key={device.productId}
+                    onClick={() => switchDevice(device)}
+                    disabled={isConnecting}
+                    className={clsx(
+                      "w-full px-3 py-2 rounded-lg bg-surface-highlight text-text-muted border border-border hover:border-primary hover:text-text-primary transition-colors text-xs font-semibold",
+                      isConnecting && "opacity-50 cursor-wait"
+                    )}
                   >
-                    Disconnect
+                    Switch to {device.productName}
                   </button>
-                  <button
-                    onClick={() => switchDevice()}
-                    className="flex-1 px-3 py-2 rounded-lg bg-surface-highlight text-text-muted border border-border hover:border-text-secondary hover:text-text-primary transition-colors text-xs font-semibold"
-                  >
-                    Switch Device
-                  </button>
-                </div>
+                ))}
+                <button
+                  onClick={connectDevice}
+                  disabled={isConnecting}
+                  className="w-full px-3 py-1.5 rounded-lg text-[10px] text-text-muted border border-dashed border-border hover:border-primary hover:text-text-primary transition-colors flex items-center justify-center gap-1"
+                >
+                  <Plus size={10} /> Add Device
+                </button>
                 <button
                   onClick={runHealthCheck}
                   disabled={healthChecking}
@@ -271,13 +285,43 @@ function App() {
                 )}
               </>
             ) : (
-              <button
-                onClick={connectDevice}
-                className="w-full px-4 py-3 rounded-lg flex items-center justify-center gap-2 transition-all font-semibold shadow-lg bg-primary text-white hover:bg-primary/90 shadow-glow cursor-pointer"
-              >
-                <span className="w-2 h-2 rounded-full bg-white/50" />
-                Connect Device
-              </button>
+              <>
+                {permittedDevices.map(device => (
+                  <button
+                    key={device.productId}
+                    onClick={() => connectToDevice(device)}
+                    disabled={isConnecting}
+                    className={clsx(
+                      "w-full px-4 py-3 rounded-lg flex items-center justify-between gap-2 transition-all font-semibold bg-surface border border-border hover:border-primary hover:text-text-primary",
+                      isConnecting && "opacity-50 cursor-wait"
+                    )}
+                  >
+                    <span className="flex items-center gap-2">
+                      <span className="w-2 h-2 rounded-full bg-text-muted" />
+                      {device.productName}
+                    </span>
+                    <span className="text-[10px] text-text-muted font-mono">
+                      0x{device.productId.toString(16).padStart(4, '0')}
+                    </span>
+                  </button>
+                ))}
+                <button
+                  onClick={connectDevice}
+                  disabled={isConnecting}
+                  className={clsx(
+                    "w-full px-4 py-3 rounded-lg flex items-center justify-center gap-2 transition-all font-semibold shadow-lg bg-primary text-white hover:bg-primary/90 shadow-glow cursor-pointer",
+                    isConnecting && "opacity-50 cursor-wait"
+                  )}
+                >
+                  <span className="w-2 h-2 rounded-full bg-white/50" />
+                  {permittedDevices.length === 0 ? 'Connect Device' : 'Connect New Device'}
+                </button>
+                {permittedDevices.length === 0 && (
+                  <p className="text-[10px] text-text-muted text-center px-2">
+                    Grant access to your keyboard and macropad separately for quick switching between them.
+                  </p>
+                )}
+              </>
             )}
           </div>
 
