@@ -11,9 +11,10 @@ interface VirtualKeyboardProps {
     onKeySelect: (index: number, isMulti: boolean) => void;
     deviceKeymap?: number[];
     keyColors?: Record<number, string>;
+    globalColor?: string | null;
 }
 
-export function VirtualKeyboard({ definition, pressedKeys, selectedKeyIndices, onKeySelect, deviceKeymap, keyColors }: VirtualKeyboardProps) {
+export function VirtualKeyboard({ definition, pressedKeys, selectedKeyIndices, onKeySelect, deviceKeymap, keyColors, globalColor }: VirtualKeyboardProps) {
 
     const renderableKeys = useMemo(() => {
         const result: KeyPosition[] = [];
@@ -103,6 +104,7 @@ export function VirtualKeyboard({ definition, pressedKeys, selectedKeyIndices, o
                     const isSelected = selectedKeyIndices.includes(idx);
                     const isPressed = key.code && pressedKeys.includes(key.code);
                     const keyColor = keyColors?.[idx];
+                    const displayColor = keyColor ?? globalColor ?? null;
                     const isMultiLine = key.label.includes('\n');
                     const labelParts = isMultiLine ? key.label.split('\n') : null;
                     // Auto-size text based on label length relative to key width
@@ -120,7 +122,7 @@ export function VirtualKeyboard({ definition, pressedKeys, selectedKeyIndices, o
                                     ? "bg-primary text-white border-primary shadow-[0_0_15px_rgba(247,88,33,0.5)] z-10"
                                     : isPressed
                                         ? "bg-white text-black border-white shadow-[0_0_10px_rgba(255,255,255,0.8)] z-20 scale-95"
-                                        : keyColor
+                                        : displayColor
                                             ? "border-white/20 text-white/90"
                                             : "bg-[#27272A] text-text-muted border-black/40 hover:border-text-secondary hover:text-text-primary"
                             )}
@@ -129,9 +131,9 @@ export function VirtualKeyboard({ definition, pressedKeys, selectedKeyIndices, o
                                 top: `${key.y * 50}px`,
                                 width: `${key.w * 50 - 4}px`,
                                 height: `${key.h * 50 - 4}px`,
-                                ...(keyColor && !isSelected && !isPressed ? {
-                                    backgroundColor: keyColor,
-                                    boxShadow: `0 0 12px ${keyColor}60`,
+                                ...(displayColor && !isSelected && !isPressed ? {
+                                    backgroundColor: displayColor,
+                                    boxShadow: keyColor ? `0 0 12px ${displayColor}60` : `0 0 8px ${displayColor}40`,
                                 } : {}),
                             }}
                             onClick={(e) => {

@@ -33,6 +33,7 @@ function App() {
   // Device State
   const [deviceKeymap, setDeviceKeymap] = useState<number[]>([]);
   const [keyColors, setKeyColors] = useState<Record<number, string>>({});
+  const [globalColor, setGlobalColor] = useState<string | null>(null);
 
   // Input Handling for visual feedback
   const [pressedKeys, setPressedKeys] = useState<string[]>([]);
@@ -358,6 +359,7 @@ function App() {
             onKeyColorChange={handleKeyColorChange}
             keyColors={keyColors}
             onPerKeyColorsRestore={handlePerKeyColorsRestore}
+            onGlobalColorChange={setGlobalColor}
           />
         ) : (
           <div className="p-4 h-full flex items-center justify-center text-text-muted text-xs">
@@ -376,6 +378,7 @@ function App() {
           onKeySelect={handleKeySelect}
           deviceKeymap={deviceKeymap}
           keyColors={keyColors}
+          globalColor={globalColor}
         />
       ) : (
         <div className="w-full h-full flex flex-col items-center justify-center gap-6 text-center">

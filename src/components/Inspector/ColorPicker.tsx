@@ -52,9 +52,11 @@ interface ColorPickerProps {
     definition?: VIAKeyboardDefinition;
     selectedKeyIndices?: number[];
     onKeyColorChange?: (indices: number[], color: string | null) => void;
+    keyColors?: Record<number, string>;
+    onGlobalColorChange?: (color: string | null) => void;
 }
 
-export function ColorPicker({ definition, selectedKeyIndices = [], onKeyColorChange }: ColorPickerProps) {
+export function ColorPicker({ definition, selectedKeyIndices = [], onKeyColorChange, keyColors, onGlobalColorChange }: ColorPickerProps) {
     const { hasPerKeyRGB, connectedProductId } = useDevice();
 
     const [color, setColor] = useState({ r: 255, g: 0, b: 0 });
@@ -79,6 +81,28 @@ export function ColorPicker({ definition, selectedKeyIndices = [], onKeyColorCha
     const pendingColor = useRef<{ r: number; g: number; b: number } | null>(null);
 
     const hasSelectedKeys = selectedKeyIndices.length > 0;
+
+    // Sync color picker to selected key's existing color
+    useEffect(() => {
+        if (!isPerKeyMode || selectedKeyIndices.length !== 1 || !keyColors) return;
+        const existingColor = keyColors[selectedKeyIndices[0]];
+        if (!existingColor) return;
+        const match = existingColor.match(/rgb\((\d+),(\d+),(\d+)\)/);
+        if (match) {
+            const [, r, g, b] = match.map(Number);
+            setColor({ r, g, b });
+        }
+    }, [selectedKeyIndices, isPerKeyMode, keyColors]);
+
+    // Emit global color (brightness-adjusted) for virtual keyboard display
+    useEffect(() => {
+        if (!onGlobalColorChange) return;
+        const scale = brightness / 255;
+        const r = Math.round(color.r * scale);
+        const g = Math.round(color.g * scale);
+        const b = Math.round(color.b * scale);
+        onGlobalColorChange(`rgb(${r},${g},${b})`);
+    }, [color, brightness, onGlobalColorChange]);
 
     const log = (msg: string) => {
         const ts = new Date().toLocaleTimeString('en-US', { hour12: false, hour: '2-digit', minute: '2-digit', second: '2-digit' });
@@ -270,10 +294,10 @@ export function ColorPicker({ definition, selectedKeyIndices = [], onKeyColorCha
         if (testingLeds) return;
         setTestingLeds(true);
         setTestPhase(null);
-        setShowDiag(true); // Auto-open diagnostics
+        setShowDiag(true);
         log('═══ LED TEST START ═══');
 
-        // Save original values first
+        // Save original VIA state
         const origBrightness = await hid.getRGBBrightness();
         const origEffect = await hid.getRGBEffect();
         const origSpeed = await hid.getRGBEffectSpeed();
@@ -281,39 +305,74 @@ export function ColorPicker({ definition, selectedKeyIndices = [], onKeyColorCha
         log(`Current state: brightness=${origBrightness}, effect=${origEffect}, speed=${origSpeed}, color=${origColor ? `H=${origColor[0]} S=${origColor[1]}` : 'null'}`);
 
         try {
-            // Step 1: Set brightness to 255 and verify
-            log('Setting brightness to 255...');
-            await hid.setRGBBrightness(255);
-            const readB = await hid.getRGBBrightness();
-            log(`  Readback: brightness=${readB} ${readB === 255 ? '(OK)' : readB === null ? '(NO RESPONSE)' : `(MISMATCH — sent 255, got ${readB})`}`);
+            if (hasPerKeyRGB && definition) {
+                // Use per-key RGB (proven to work on this hardware)
+                log('Using per-key RGB mode for test...');
+                const enabled = await hid.enablePerKeyMode();
+                if (!enabled) {
+                    log('ERROR: Failed to enable per-key mode');
+                    return;
+                }
 
-            // Step 2: Set effect to 1 (Solid Color) and verify
-            log('Setting effect to 1 (Solid Color)...');
-            await hid.setRGBEffect(1);
-            const readE = await hid.getRGBEffect();
-            log(`  Readback: effect=${readE} ${readE === 1 ? '(OK)' : readE === null ? '(NO RESPONSE)' : `(MISMATCH — sent 1, got ${readE})`}`);
+                // Flash white
+                log('Flashing WHITE...');
+                await hid.setAllKeysColor(255, 255, 255, definition.ledCount);
+                await new Promise(res => setTimeout(res, 800));
 
-            // Step 3: Set color to white (H=0, S=0) and verify
-            log('Setting color to white (H=0, S=0)...');
-            await hid.setRGBColor(0, 0);
-            const readC = await hid.getRGBColor();
-            log(`  Readback: color=${readC ? `H=${readC[0]} S=${readC[1]}` : 'null'} ${readC && readC[0] === 0 && readC[1] === 0 ? '(OK)' : readC === null ? '(NO RESPONSE)' : '(MISMATCH)'}`);
+                // Flash red
+                log('Flashing RED...');
+                await hid.setAllKeysColor(255, 0, 0, definition.ledCount);
+                await new Promise(res => setTimeout(res, 800));
 
-            if (readB === null && readE === null && readC === null) {
-                log('ERROR: Device not responding to any commands — HID connection may be stale');
-                log('Try disconnecting and reconnecting the device');
+                // Flash green
+                log('Flashing GREEN...');
+                await hid.setAllKeysColor(0, 255, 0, definition.ledCount);
+                await new Promise(res => setTimeout(res, 800));
+
+                // Flash blue
+                log('Flashing BLUE...');
+                await hid.setAllKeysColor(0, 0, 255, definition.ledCount);
+                await new Promise(res => setTimeout(res, 800));
+
+                // Back to white and hold
+                log('Holding WHITE — look at your keyboard now...');
+                await hid.setAllKeysColor(255, 255, 255, definition.ledCount);
+                await new Promise(res => setTimeout(res, 1000));
+
+                // Disable per-key mode to restore normal animations
+                await hid.disablePerKeyMode();
+                log('Per-key mode disabled, normal animations restored');
             } else {
-                log('Commands sent — LEDs should now be bright white');
-                log('Look at your keyboard now...');
-            }
+                // Fallback: VIA global commands
+                log('Per-key RGB not available, using VIA global commands...');
 
-            // Hold bright white for 3 seconds
-            await new Promise(res => setTimeout(res, 3000));
+                log('Setting brightness to 255...');
+                await hid.setRGBBrightness(255);
+                const readB = await hid.getRGBBrightness();
+                log(`  Readback: brightness=${readB} ${readB === 255 ? '(OK)' : readB === null ? '(NO RESPONSE)' : `(MISMATCH — sent 255, got ${readB})`}`);
+
+                log('Setting effect to 1 (Solid Color)...');
+                await hid.setRGBEffect(1);
+                const readE = await hid.getRGBEffect();
+                log(`  Readback: effect=${readE} ${readE === 1 ? '(OK)' : readE === null ? '(NO RESPONSE)' : `(MISMATCH — sent 1, got ${readE})`}`);
+
+                log('Setting color to white (H=0, S=0)...');
+                await hid.setRGBColor(0, 0);
+                const readC = await hid.getRGBColor();
+                log(`  Readback: color=${readC ? `H=${readC[0]} S=${readC[1]}` : 'null'} ${readC && readC[0] === 0 && readC[1] === 0 ? '(OK)' : readC === null ? '(NO RESPONSE)' : '(MISMATCH)'}`);
+
+                if (readB === null && readE === null && readC === null) {
+                    log('ERROR: Device not responding — HID connection may be stale');
+                } else {
+                    log('Commands sent — LEDs should now be bright white');
+                }
+
+                await new Promise(res => setTimeout(res, 3000));
+            }
         } catch (err) {
             log(`LED Test ERROR: ${err}`);
         } finally {
             setTestingLeds(false);
-            // Store original values so we can restore later
             setDiagResult({ brightness: origBrightness, effect: origEffect, speed: origSpeed, color: origColor });
             setTestPhase('asking');
             log('═══ Waiting for user confirmation ═══');
