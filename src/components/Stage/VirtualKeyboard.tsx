@@ -133,7 +133,7 @@ export function VirtualKeyboard({ definition, pressedKeys, selectedKeyIndices, o
                                 height: `${key.h * 50 - 4}px`,
                                 ...(displayColor && !isSelected && !isPressed ? {
                                     backgroundColor: displayColor,
-                                    boxShadow: keyColor ? `0 0 12px ${displayColor}60` : `0 0 8px ${displayColor}40`,
+                                    boxShadow: keyColor ? `0 0 14px 2px ${displayColor}90` : `0 0 10px 1px ${displayColor}70`,
                                 } : {}),
                             }}
                             onClick={(e) => {

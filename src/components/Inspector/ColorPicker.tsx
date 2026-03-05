@@ -94,15 +94,11 @@ export function ColorPicker({ definition, selectedKeyIndices = [], onKeyColorCha
         }
     }, [selectedKeyIndices, isPerKeyMode, keyColors]);
 
-    // Emit global color (brightness-adjusted) for virtual keyboard display
+    // Emit global color for virtual keyboard display (full vibrancy, not dimmed by brightness)
     useEffect(() => {
         if (!onGlobalColorChange) return;
-        const scale = brightness / 255;
-        const r = Math.round(color.r * scale);
-        const g = Math.round(color.g * scale);
-        const b = Math.round(color.b * scale);
-        onGlobalColorChange(`rgb(${r},${g},${b})`);
-    }, [color, brightness, onGlobalColorChange]);
+        onGlobalColorChange(`rgb(${color.r},${color.g},${color.b})`);
+    }, [color, onGlobalColorChange]);
 
     const log = (msg: string) => {
         const ts = new Date().toLocaleTimeString('en-US', { hour12: false, hour: '2-digit', minute: '2-digit', second: '2-digit' });
@@ -182,8 +178,8 @@ export function ColorPicker({ definition, selectedKeyIndices = [], onKeyColorCha
                 if (ledIndices.length > 0) {
                     await hid.setPerKeyColor(ar, ag, ab, ledIndices);
                 }
-                // Update virtual keyboard visualization
-                onKeyColorChange?.(selectedKeyIndices, `rgb(${ar},${ag},${ab})`);
+                // Update virtual keyboard visualization (use full color, not brightness-dimmed)
+                onKeyColorChange?.(selectedKeyIndices, `rgb(${r},${g},${b})`);
             } else {
                 // Global mode: convert to HSV and send via VIA protocol
                 const [h, s] = rgbToHsv(r, g, b);
