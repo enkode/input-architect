@@ -69,7 +69,10 @@ export function ColorPicker({ definition, selectedKeyIndices = [], onKeyColorCha
     const [diagLog, setDiagLog] = useState<string[]>([]);
     const [showDiag, setShowDiag] = useState(false);
     const [testingLeds, setTestingLeds] = useState(false);
+    const [testPhase, setTestPhase] = useState<null | 'asking' | 'diagnosing' | 'troubleshoot'>(null);
+    const [diagResult, setDiagResult] = useState<{ brightness: number | null; effect: number | null; speed: number | null; color: [number, number] | null } | null>(null);
     const [resettingLeds, setResettingLeds] = useState(false);
+    const [fixingStep, setFixingStep] = useState<string | null>(null);
 
     const isSending = useRef(false);
     const pendingColor = useRef<{ r: number; g: number; b: number } | null>(null);
@@ -248,6 +251,7 @@ export function ColorPicker({ definition, selectedKeyIndices = [], onKeyColorCha
     const handleTestLeds = async () => {
         if (testingLeds) return;
         setTestingLeds(true);
+        setTestPhase(null);
         log('LED Test: Flashing all LEDs white...');
         try {
             // Save current values
@@ -289,13 +293,76 @@ export function ColorPicker({ definition, selectedKeyIndices = [], onKeyColorCha
             if (origBrightness !== null) setBrightness(origBrightness);
             if (origEffect !== null) setEffectId(origEffect);
             if (origColor !== null) {
-                const [r, g, b2] = hsvToRgb(origColor[0], origColor[1], 255);
-                setColor({ r, g, b: b2 });
+                const [r2, g2, b2] = hsvToRgb(origColor[0], origColor[1], 255);
+                setColor({ r: r2, g: g2, b: b2 });
             }
         } catch (err) {
             log(`LED Test ERROR: ${err}`);
         } finally {
             setTestingLeds(false);
+            setTestPhase('asking');
+        }
+    };
+
+    const handleTestAnswer = async (sawLights: boolean) => {
+        if (sawLights) {
+            setTestPhase(null);
+            log('User confirmed LEDs are working');
+            return;
+        }
+        // User didn't see lights — run diagnostics
+        setTestPhase('diagnosing');
+        log('User reported no lights — running diagnostics...');
+        try {
+            const b = await hid.getRGBBrightness();
+            const e = await hid.getRGBEffect();
+            const s = await hid.getRGBEffectSpeed();
+            const c = await hid.getRGBColor();
+            setDiagResult({ brightness: b, effect: e, speed: s, color: c });
+
+            const issues: string[] = [];
+            if (b !== null && b === 0) issues.push('Brightness is 0 (off)');
+            if (e !== null && e === 0) issues.push('Effect is 0 (disabled)');
+            if (b === null) issues.push('Brightness read failed — device may not be responding');
+            if (issues.length > 0) {
+                log(`  Issues found: ${issues.join(', ')}`);
+            } else {
+                log(`  Settings look normal: brightness=${b}, effect=${e}, speed=${s}`);
+                log('  LEDs may have been disabled via keyboard shortcut (Fn+F10 or similar)');
+            }
+            setTestPhase('troubleshoot');
+        } catch (err) {
+            log(`Diagnostics ERROR: ${err}`);
+            setTestPhase('troubleshoot');
+        }
+    };
+
+    const handleQuickFix = async (fix: 'brightness' | 'effect' | 'full-reset') => {
+        setFixingStep(fix);
+        try {
+            if (fix === 'brightness') {
+                log('Fix: Setting brightness to maximum...');
+                await hid.setRGBBrightness(255);
+                setBrightness(255);
+                await hid.saveRGBSettings({ brightness: 255, effectId: effectId, speed, hue: rgbToHsv(color.r, color.g, color.b)[0], saturation: rgbToHsv(color.r, color.g, color.b)[1] }, log);
+                log('Brightness set to 255 and saved');
+            } else if (fix === 'effect') {
+                log('Fix: Enabling solid color effect...');
+                await hid.setRGBEffect(1);
+                setEffectId(1);
+                await hid.setRGBBrightness(255);
+                setBrightness(255);
+                await hid.saveRGBSettings({ brightness: 255, effectId: 1, speed, hue: rgbToHsv(color.r, color.g, color.b)[0], saturation: rgbToHsv(color.r, color.g, color.b)[1] }, log);
+                log('Effect set to Solid Color and saved');
+            } else {
+                log('Fix: Full lighting reset...');
+                await handleResetLighting();
+            }
+            setHasUnsavedChanges(false);
+        } catch (err) {
+            log(`Fix ERROR: ${err}`);
+        } finally {
+            setFixingStep(null);
         }
     };
 
@@ -589,6 +656,109 @@ export function ColorPicker({ definition, selectedKeyIndices = [], onKeyColorCha
                     {resettingLeds ? 'Resetting...' : 'Reset Lights'}
                 </button>
             </div>
+
+            {/* Post-test question */}
+            {testPhase === 'asking' && (
+                <div className="bg-surface border border-primary/30 rounded-lg p-3 space-y-2">
+                    <div className="text-xs font-semibold text-text-primary">Did you see the lights flash?</div>
+                    <div className="flex gap-2">
+                        <button
+                            onClick={() => handleTestAnswer(true)}
+                            className="flex-1 py-2 rounded-md text-xs font-semibold bg-green-500/10 text-green-400 border border-green-500/20 hover:bg-green-500/20 transition-colors"
+                        >
+                            Yes, they worked
+                        </button>
+                        <button
+                            onClick={() => handleTestAnswer(false)}
+                            className="flex-1 py-2 rounded-md text-xs font-semibold bg-red-500/10 text-red-400 border border-red-500/20 hover:bg-red-500/20 transition-colors"
+                        >
+                            No, nothing happened
+                        </button>
+                    </div>
+                </div>
+            )}
+
+            {/* Diagnosing spinner */}
+            {testPhase === 'diagnosing' && (
+                <div className="bg-surface border border-border rounded-lg p-3 flex items-center gap-2 text-xs text-text-muted">
+                    <RefreshCw size={14} className="animate-spin" />
+                    Running diagnostics...
+                </div>
+            )}
+
+            {/* Troubleshooting panel */}
+            {testPhase === 'troubleshoot' && diagResult && (
+                <div className="bg-surface border border-yellow-500/30 rounded-lg p-3 space-y-3">
+                    <div className="text-xs font-semibold text-yellow-400">Troubleshooting</div>
+
+                    {/* Current state readout */}
+                    <div className="text-[10px] font-mono text-text-muted space-y-0.5">
+                        <div>Brightness: <span className={diagResult.brightness === 0 ? 'text-red-400 font-bold' : 'text-text-primary'}>{diagResult.brightness ?? 'N/A'}{diagResult.brightness === 0 ? ' (OFF)' : ''}</span></div>
+                        <div>Effect: <span className={diagResult.effect === 0 ? 'text-red-400 font-bold' : 'text-text-primary'}>{diagResult.effect ?? 'N/A'}{diagResult.effect === 0 ? ' (DISABLED)' : ''}</span></div>
+                        <div>Speed: <span className="text-text-primary">{diagResult.speed ?? 'N/A'}</span></div>
+                        <div>Color: <span className="text-text-primary">{diagResult.color ? `H=${diagResult.color[0]} S=${diagResult.color[1]}` : 'N/A'}</span></div>
+                    </div>
+
+                    {/* Suggested fixes */}
+                    <div className="space-y-1.5">
+                        {diagResult.brightness === 0 && (
+                            <button
+                                onClick={() => handleQuickFix('brightness')}
+                                disabled={fixingStep !== null}
+                                className={clsx(
+                                    "w-full py-2 px-3 rounded-md text-xs font-semibold flex items-center gap-2 transition-colors border",
+                                    fixingStep === 'brightness' ? "bg-yellow-500/10 text-yellow-400 border-yellow-500/20 cursor-wait" : "bg-green-500/10 text-green-400 border-green-500/20 hover:bg-green-500/20"
+                                )}
+                            >
+                                <Zap size={12} />
+                                {fixingStep === 'brightness' ? 'Fixing...' : 'Fix: Set brightness to maximum'}
+                            </button>
+                        )}
+                        {diagResult.effect === 0 && (
+                            <button
+                                onClick={() => handleQuickFix('effect')}
+                                disabled={fixingStep !== null}
+                                className={clsx(
+                                    "w-full py-2 px-3 rounded-md text-xs font-semibold flex items-center gap-2 transition-colors border",
+                                    fixingStep === 'effect' ? "bg-yellow-500/10 text-yellow-400 border-yellow-500/20 cursor-wait" : "bg-green-500/10 text-green-400 border-green-500/20 hover:bg-green-500/20"
+                                )}
+                            >
+                                <Zap size={12} />
+                                {fixingStep === 'effect' ? 'Fixing...' : 'Fix: Enable solid color effect'}
+                            </button>
+                        )}
+                        <button
+                            onClick={() => handleQuickFix('full-reset')}
+                            disabled={fixingStep !== null}
+                            className={clsx(
+                                "w-full py-2 px-3 rounded-md text-xs font-semibold flex items-center gap-2 transition-colors border",
+                                fixingStep === 'full-reset' ? "bg-orange-500/10 text-orange-400 border-orange-500/20 cursor-wait" : "bg-orange-500/10 text-orange-400 border-orange-500/20 hover:bg-orange-500/20"
+                            )}
+                        >
+                            <RotateCcw size={12} />
+                            {fixingStep === 'full-reset' ? 'Resetting...' : 'Full reset: Max brightness + Solid Color + Save to EEPROM'}
+                        </button>
+                    </div>
+
+                    {/* Manual tips */}
+                    <div className="text-[10px] text-text-muted space-y-1 border-t border-border pt-2 mt-2">
+                        <div className="font-semibold text-text-secondary">If fixes don't work:</div>
+                        <ul className="list-disc list-inside space-y-0.5">
+                            <li>Try pressing <span className="font-mono text-primary">Fn + Space</span> or <span className="font-mono text-primary">Fn + F10</span> — these keyboard shortcuts can toggle LEDs off</li>
+                            <li>Disconnect and reconnect the device</li>
+                            <li>Close the laptop lid, wait 5 seconds, reopen</li>
+                            <li>Check if the keyboard module is seated properly</li>
+                        </ul>
+                    </div>
+
+                    <button
+                        onClick={() => setTestPhase(null)}
+                        className="w-full py-1.5 rounded-md text-[10px] text-text-muted hover:text-text-primary transition-colors"
+                    >
+                        Dismiss
+                    </button>
+                </div>
+            )}
 
             {/* Diagnostic Log */}
             <div className="bg-surface border border-border rounded-lg overflow-hidden">
