@@ -1,5 +1,6 @@
 import { useState, useRef, useEffect } from 'react';
 import { hid } from '../../services/HIDService';
+import { storageService } from '../../services/StorageService';
 import { useDevice } from '../../context/DeviceContext';
 import { FRAMEWORK_RGB_EFFECTS } from '../../data/definitions/framework16';
 import { Save, ChevronDown, CheckCircle2, RefreshCw, Terminal, Zap, RotateCcw } from 'lucide-react';
@@ -54,7 +55,7 @@ interface ColorPickerProps {
 }
 
 export function ColorPicker({ definition, selectedKeyIndices = [], onKeyColorChange }: ColorPickerProps) {
-    const { hasPerKeyRGB } = useDevice();
+    const { hasPerKeyRGB, connectedProductId } = useDevice();
 
     const [color, setColor] = useState({ r: 255, g: 0, b: 0 });
     const [brightness, setBrightness] = useState(128);
@@ -233,6 +234,13 @@ export function ColorPicker({ definition, selectedKeyIndices = [], onKeyColorCha
             }, log);
             if (ok) {
                 log('Save SUCCESS');
+                // Also save to localStorage for auto-restore on reconnect
+                if (connectedProductId !== null) {
+                    storageService.saveDeviceState(connectedProductId, {
+                        rgbSettings: { brightness, effectId, speed, hue: h, saturation: s },
+                    });
+                    log('Settings also saved to localStorage');
+                }
                 setSaveState('saved');
                 setHasUnsavedChanges(false);
                 setTimeout(() => setSaveState('idle'), 2000);
@@ -252,67 +260,77 @@ export function ColorPicker({ definition, selectedKeyIndices = [], onKeyColorCha
         if (testingLeds) return;
         setTestingLeds(true);
         setTestPhase(null);
-        log('LED Test: Flashing all LEDs white...');
+        setShowDiag(true); // Auto-open diagnostics
+        log('═══ LED TEST START ═══');
+
+        // Save original values first
+        const origBrightness = await hid.getRGBBrightness();
+        const origEffect = await hid.getRGBEffect();
+        const origSpeed = await hid.getRGBEffectSpeed();
+        const origColor = await hid.getRGBColor();
+        log(`Current state: brightness=${origBrightness}, effect=${origEffect}, speed=${origSpeed}, color=${origColor ? `H=${origColor[0]} S=${origColor[1]}` : 'null'}`);
+
         try {
-            // Save current values
-            const origBrightness = await hid.getRGBBrightness();
-            const origEffect = await hid.getRGBEffect();
-            const origColor = await hid.getRGBColor();
-
-            // Flash bright white (HSV: H=0, S=0 = white)
+            // Step 1: Set brightness to 255 and verify
+            log('Setting brightness to 255...');
             await hid.setRGBBrightness(255);
-            await hid.setRGBEffect(1); // Solid color
-            await hid.setRGBColor(0, 0); // White
-            log('  LEDs set to full white — check your keyboard');
+            const readB = await hid.getRGBBrightness();
+            log(`  Readback: brightness=${readB} ${readB === 255 ? '(OK)' : readB === null ? '(NO RESPONSE)' : `(MISMATCH — sent 255, got ${readB})`}`);
 
-            // Hold for 2 seconds
-            await new Promise(res => setTimeout(res, 2000));
+            // Step 2: Set effect to 1 (Solid Color) and verify
+            log('Setting effect to 1 (Solid Color)...');
+            await hid.setRGBEffect(1);
+            const readE = await hid.getRGBEffect();
+            log(`  Readback: effect=${readE} ${readE === 1 ? '(OK)' : readE === null ? '(NO RESPONSE)' : `(MISMATCH — sent 1, got ${readE})`}`);
 
-            // Flash red
-            await hid.setRGBColor(0, 255); // Red (H=0, S=255)
-            log('  Flashing red...');
-            await new Promise(res => setTimeout(res, 1000));
+            // Step 3: Set color to white (H=0, S=0) and verify
+            log('Setting color to white (H=0, S=0)...');
+            await hid.setRGBColor(0, 0);
+            const readC = await hid.getRGBColor();
+            log(`  Readback: color=${readC ? `H=${readC[0]} S=${readC[1]}` : 'null'} ${readC && readC[0] === 0 && readC[1] === 0 ? '(OK)' : readC === null ? '(NO RESPONSE)' : '(MISMATCH)'}`);
 
-            // Flash green
-            await hid.setRGBColor(85, 255); // Green (H=85 ≈ 120°)
-            log('  Flashing green...');
-            await new Promise(res => setTimeout(res, 1000));
-
-            // Flash blue
-            await hid.setRGBColor(170, 255); // Blue (H=170 ≈ 240°)
-            log('  Flashing blue...');
-            await new Promise(res => setTimeout(res, 1000));
-
-            // Restore original values
-            if (origBrightness !== null) await hid.setRGBBrightness(origBrightness);
-            if (origEffect !== null) await hid.setRGBEffect(origEffect);
-            if (origColor !== null) await hid.setRGBColor(origColor[0], origColor[1]);
-            log('LED Test complete — original settings restored');
-
-            // Sync UI state back
-            if (origBrightness !== null) setBrightness(origBrightness);
-            if (origEffect !== null) setEffectId(origEffect);
-            if (origColor !== null) {
-                const [r2, g2, b2] = hsvToRgb(origColor[0], origColor[1], 255);
-                setColor({ r: r2, g: g2, b: b2 });
+            if (readB === null && readE === null && readC === null) {
+                log('ERROR: Device not responding to any commands — HID connection may be stale');
+                log('Try disconnecting and reconnecting the device');
+            } else {
+                log('Commands sent — LEDs should now be bright white');
+                log('Look at your keyboard now...');
             }
+
+            // Hold bright white for 3 seconds
+            await new Promise(res => setTimeout(res, 3000));
         } catch (err) {
             log(`LED Test ERROR: ${err}`);
         } finally {
             setTestingLeds(false);
+            // Store original values so we can restore later
+            setDiagResult({ brightness: origBrightness, effect: origEffect, speed: origSpeed, color: origColor });
             setTestPhase('asking');
+            log('═══ Waiting for user confirmation ═══');
         }
     };
 
     const handleTestAnswer = async (sawLights: boolean) => {
         if (sawLights) {
+            log('User confirmed LEDs are working — restoring previous settings');
+            // Restore original values
+            if (diagResult) {
+                if (diagResult.brightness !== null) { await hid.setRGBBrightness(diagResult.brightness); setBrightness(diagResult.brightness); }
+                if (diagResult.effect !== null) { await hid.setRGBEffect(diagResult.effect); setEffectId(diagResult.effect); }
+                if (diagResult.speed !== null) await hid.setRGBEffectSpeed(diagResult.speed);
+                if (diagResult.color !== null) {
+                    await hid.setRGBColor(diagResult.color[0], diagResult.color[1]);
+                    const [r2, g2, b2] = hsvToRgb(diagResult.color[0], diagResult.color[1], 255);
+                    setColor({ r: r2, g: g2, b: b2 });
+                }
+                log('Previous settings restored');
+            }
             setTestPhase(null);
-            log('User confirmed LEDs are working');
             return;
         }
-        // User didn't see lights — run diagnostics
+        // User didn't see lights — read current state for troubleshooting
         setTestPhase('diagnosing');
-        log('User reported no lights — running diagnostics...');
+        log('User reported no lights — reading device state...');
         try {
             const b = await hid.getRGBBrightness();
             const e = await hid.getRGBEffect();
@@ -322,13 +340,15 @@ export function ColorPicker({ definition, selectedKeyIndices = [], onKeyColorCha
 
             const issues: string[] = [];
             if (b !== null && b === 0) issues.push('Brightness is 0 (off)');
+            if (b !== null && b === 255) issues.push('Brightness reads as 255 but no light — RGB may be toggled off via keyboard shortcut');
             if (e !== null && e === 0) issues.push('Effect is 0 (disabled)');
-            if (b === null) issues.push('Brightness read failed — device may not be responding');
+            if (b === null) issues.push('Brightness read returned null — device not responding');
+            if (e === null) issues.push('Effect read returned null — device not responding');
             if (issues.length > 0) {
-                log(`  Issues found: ${issues.join(', ')}`);
+                log(`Issues: ${issues.join('; ')}`);
             } else {
-                log(`  Settings look normal: brightness=${b}, effect=${e}, speed=${s}`);
-                log('  LEDs may have been disabled via keyboard shortcut (Fn+F10 or similar)');
+                log(`Settings read OK but no light: brightness=${b}, effect=${e}`);
+                log('RGB matrix may be disabled via keyboard shortcut (Fn+Space / Fn+F10)');
             }
             setTestPhase('troubleshoot');
         } catch (err) {
@@ -339,21 +359,26 @@ export function ColorPicker({ definition, selectedKeyIndices = [], onKeyColorCha
 
     const handleQuickFix = async (fix: 'brightness' | 'effect' | 'full-reset') => {
         setFixingStep(fix);
+        setShowDiag(true);
         try {
             if (fix === 'brightness') {
                 log('Fix: Setting brightness to maximum...');
                 await hid.setRGBBrightness(255);
+                const readback = await hid.getRGBBrightness();
+                log(`  Readback: ${readback}`);
                 setBrightness(255);
-                await hid.saveRGBSettings({ brightness: 255, effectId: effectId, speed, hue: rgbToHsv(color.r, color.g, color.b)[0], saturation: rgbToHsv(color.r, color.g, color.b)[1] }, log);
-                log('Brightness set to 255 and saved');
+                const [h, s] = rgbToHsv(color.r, color.g, color.b);
+                await hid.saveRGBSettings({ brightness: 255, effectId, speed, hue: h, saturation: s }, log);
+                log('Brightness fix applied and saved');
             } else if (fix === 'effect') {
-                log('Fix: Enabling solid color effect...');
+                log('Fix: Enabling solid color effect + max brightness...');
                 await hid.setRGBEffect(1);
-                setEffectId(1);
                 await hid.setRGBBrightness(255);
+                setEffectId(1);
                 setBrightness(255);
-                await hid.saveRGBSettings({ brightness: 255, effectId: 1, speed, hue: rgbToHsv(color.r, color.g, color.b)[0], saturation: rgbToHsv(color.r, color.g, color.b)[1] }, log);
-                log('Effect set to Solid Color and saved');
+                const [h, s] = rgbToHsv(color.r, color.g, color.b);
+                await hid.saveRGBSettings({ brightness: 255, effectId: 1, speed, hue: h, saturation: s }, log);
+                log('Effect fix applied and saved');
             } else {
                 log('Fix: Full lighting reset...');
                 await handleResetLighting();
@@ -369,7 +394,8 @@ export function ColorPicker({ definition, selectedKeyIndices = [], onKeyColorCha
     const handleResetLighting = async () => {
         if (resettingLeds) return;
         setResettingLeds(true);
-        log('Resetting lighting to defaults...');
+        setShowDiag(true);
+        log('═══ RESETTING LIGHTING ═══');
         try {
             // Set known-good defaults: max brightness, solid color, medium speed, red
             const defaults = {
@@ -380,11 +406,21 @@ export function ColorPicker({ definition, selectedKeyIndices = [], onKeyColorCha
                 saturation: 255,
             };
 
+            log('Setting brightness=255...');
             await hid.setRGBBrightness(defaults.brightness);
+            const rb = await hid.getRGBBrightness();
+            log(`  Readback: ${rb} ${rb === 255 ? '(OK)' : rb === null ? '(NO RESPONSE)' : `(got ${rb})`}`);
+
+            log('Setting effect=1 (Solid Color)...');
             await hid.setRGBEffect(defaults.effectId);
+            const re = await hid.getRGBEffect();
+            log(`  Readback: ${re} ${re === 1 ? '(OK)' : re === null ? '(NO RESPONSE)' : `(got ${re})`}`);
+
+            log('Setting speed=128...');
             await hid.setRGBEffectSpeed(defaults.speed);
+
+            log('Setting color=red (H=0, S=255)...');
             await hid.setRGBColor(defaults.hue, defaults.saturation);
-            log('  RAM values set to defaults');
 
             // Save to EEPROM so it persists
             const ok = await hid.saveRGBSettings(defaults, log);
@@ -392,6 +428,12 @@ export function ColorPicker({ definition, selectedKeyIndices = [], onKeyColorCha
                 log('Reset complete — defaults saved to EEPROM');
             } else {
                 log('Reset applied to RAM but EEPROM save may have failed');
+            }
+
+            // Also save to localStorage for auto-restore on reconnect
+            if (connectedProductId !== null) {
+                storageService.saveDeviceState(connectedProductId, { rgbSettings: defaults });
+                log('Settings also saved to localStorage for auto-restore');
             }
 
             // Update UI to match

@@ -111,10 +111,29 @@ function App() {
     setDeviceKeymap([]);
     refreshKeymap();
 
-    // Auto-restore per-key colors once per connection session
+    // Auto-restore saved settings once per connection session
     if (isConnected && !perKeyRestoredRef.current && connectedProductId !== null && activeDefinition) {
       perKeyRestoredRef.current = true;
       const stored = storageService.loadDeviceState(connectedProductId);
+
+      // Restore global RGB settings from localStorage
+      if (stored?.rgbSettings) {
+        const { brightness, effectId, speed, hue, saturation } = stored.rgbSettings;
+        console.log(`Auto-restoring RGB settings: brightness=${brightness}, effect=${effectId}, speed=${speed}, H=${hue}, S=${saturation}`);
+        (async () => {
+          try {
+            await hid.setRGBBrightness(brightness);
+            await hid.setRGBEffect(effectId);
+            await hid.setRGBEffectSpeed(speed);
+            await hid.setRGBColor(hue, saturation);
+            console.log('RGB settings restored from localStorage');
+          } catch (err) {
+            console.error('Failed to restore RGB settings:', err);
+          }
+        })();
+      }
+
+      // Restore per-key colors
       if (stored?.perKeyColors && Object.keys(stored.perKeyColors).length > 0) {
         setKeyColors(stored.perKeyColors);
         if (hasPerKeyRGB) {
