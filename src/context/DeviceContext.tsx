@@ -1,5 +1,6 @@
 import { createContext, useContext, useEffect, useState, useCallback, type ReactNode } from 'react';
 import { hid } from '../services/HIDService';
+import { storageService } from '../services/StorageService';
 
 interface PermittedDevice {
     productId: number;
@@ -68,7 +69,39 @@ export function DeviceProvider({ children }: { children: ReactNode }) {
             hid.autoConnect();
         }
 
-        return unsubscribe;
+        // Re-apply RGB settings when waking from sleep (Modern Standby doesn't disconnect USB,
+        // but the IS31FL3743A LED driver IC loses its I2C state — known Framework firmware bug)
+        const handleVisibilityChange = async () => {
+            if (document.visibilityState !== 'visible') return;
+            if (!hid.isDeviceConnected()) return;
+            const pid = hid.getConnectedProductId();
+            if (pid === null) return;
+
+            // Brief delay to let the LED driver IC stabilize after wake
+            await new Promise(r => setTimeout(r, 500));
+            if (!hid.isDeviceConnected()) return;
+
+            console.log('Page visible — re-applying saved RGB settings after wake');
+            const stored = storageService.loadDeviceState(pid);
+            if (stored?.rgbSettings) {
+                const { brightness, effectId, speed, hue, saturation } = stored.rgbSettings;
+                try {
+                    await hid.setRGBBrightness(brightness);
+                    await hid.setRGBEffect(effectId);
+                    await hid.setRGBEffectSpeed(speed);
+                    await hid.setRGBColor(hue, saturation);
+                    console.log('RGB settings re-applied after wake');
+                } catch (err) {
+                    console.warn('Failed to re-apply RGB settings after wake:', err);
+                }
+            }
+        };
+        document.addEventListener('visibilitychange', handleVisibilityChange);
+
+        return () => {
+            unsubscribe();
+            document.removeEventListener('visibilitychange', handleVisibilityChange);
+        };
     }, [refreshPermittedDevices]);
 
     const connectDevice = async () => {

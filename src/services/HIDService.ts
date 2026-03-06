@@ -57,6 +57,24 @@ export class HIDService {
     private _perKeyEnabled: boolean = false;
     // Command queue to serialize HID commands (prevents response mix-ups)
     private commandQueue: Promise<DataView | null> = Promise.resolve(null);
+    private _reconnecting: boolean = false;
+
+    constructor() {
+        // Auto-reconnect when a supported device appears (e.g. after sleep/wake)
+        navigator.hid.addEventListener('connect', async (e: HIDConnectionEvent) => {
+            const d = e.device;
+            if (this.isConnected || this._reconnecting) return;
+            if (!SUPPORTED_VIDS.includes(d.vendorId)) return;
+            if (!d.collections?.some(c => c.usagePage === RAW_HID_USAGE_PAGE && c.usage === RAW_HID_USAGE)) return;
+            console.log(`HID: Device reconnected after sleep/wake: ${d.productName} (PID: 0x${d.productId.toString(16)})`);
+            this._reconnecting = true;
+            try {
+                await this.openDevice(d);
+            } finally {
+                this._reconnecting = false;
+            }
+        });
+    }
 
     /** Whether the device uses VIA V3 (channel-based) protocol */
     get isV3(): boolean {
