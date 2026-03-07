@@ -53,8 +53,9 @@ export function ColorPicker({ definition, selectedKeyIndices = [], onKeyColorCha
     }, [isPerKeyMode, hasPerKeyRGB, perKeyActive]);
 
     // Sync color picker to selected key's existing color
+    // Uses the first selected key's color as reference
     useEffect(() => {
-        if (!isPerKeyMode || selectedKeyIndices.length !== 1 || !keyColors) return;
+        if (!isPerKeyMode || selectedKeyIndices.length === 0 || !keyColors) return;
         const existingColor = keyColors[selectedKeyIndices[0]];
         if (!existingColor) return;
         const match = existingColor.match(/rgb\((\d+),(\d+),(\d+)\)/);
@@ -62,7 +63,7 @@ export function ColorPicker({ definition, selectedKeyIndices = [], onKeyColorCha
             const [, r, g, b] = match.map(Number);
             setColor({ r, g, b });
         }
-    }, [selectedKeyIndices, isPerKeyMode, keyColors]);
+    }, [selectedKeyIndices, isPerKeyMode]);
 
     // Emit global color for virtual keyboard display (full vibrancy, not dimmed by brightness)
     useEffect(() => {

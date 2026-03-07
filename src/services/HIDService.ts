@@ -438,8 +438,8 @@ export class HIDService {
     async setPerKeyColor(r: number, g: number, b: number, ledIndices: number[]): Promise<boolean> {
         if (!this._hasPerKeySupport || !this._perKeyEnabled) return false;
         // Protocol: [0xFE, 0x10, R, G, B, flags=0, count, idx1, idx2, ...]
-        // Max ~24 LED indices per packet (32 - 7 header bytes = 25)
-        const maxPerPacket = 25;
+        // Keep batches small for reliable firmware processing
+        const maxPerPacket = 10;
         for (let i = 0; i < ledIndices.length; i += maxPerPacket) {
             const batch = ledIndices.slice(i, i + maxPerPacket);
             await this.sendCommand(RGB_REMOTE_CMD, [
@@ -449,9 +449,9 @@ export class HIDService {
                 batch.length,
                 ...batch
             ]);
-            // Small delay between packets to avoid overwhelming firmware
+            // Delay between packets to let firmware process each batch
             if (i + maxPerPacket < ledIndices.length) {
-                await new Promise(r => setTimeout(r, 2));
+                await new Promise(r => setTimeout(r, 5));
             }
         }
         return true;

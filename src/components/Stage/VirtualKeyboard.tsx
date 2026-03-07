@@ -91,7 +91,9 @@ export function VirtualKeyboard({ definition, pressedKeys, selectedKeyIndices, o
                             className={clsx(
                                 "absolute rounded-md flex flex-col items-center justify-center font-semibold select-none transition-all duration-75 overflow-hidden",
                                 isSelected
-                                    ? "bg-primary text-white border-2 border-primary shadow-[0_0_15px_rgba(247,88,33,0.5)] z-10"
+                                    ? displayColor
+                                        ? "text-white border-2 border-white/80 z-10"
+                                        : "bg-primary text-white border-2 border-primary shadow-[0_0_15px_rgba(247,88,33,0.5)] z-10"
                                     : isPreview
                                         ? "bg-[#27272A] text-text-primary border border-primary/40 shadow-[0_0_8px_rgba(247,88,33,0.25)] z-10"
                                         : isPressed
@@ -105,6 +107,10 @@ export function VirtualKeyboard({ definition, pressedKeys, selectedKeyIndices, o
                                 top: `${key.y * 50}px`,
                                 width: `${key.w * 50 - 4}px`,
                                 height: `${key.h * 50 - 4}px`,
+                                ...(displayColor && isSelected ? {
+                                    backgroundColor: displayColor,
+                                    boxShadow: `0 0 12px 3px ${glowColor}90, inset 0 0 20px rgba(255,255,255,0.15)`,
+                                } : {}),
                                 ...(displayColor && !isSelected && !isPreview && !isPressed ? {
                                     borderColor: displayColor,
                                     boxShadow: `inset 0 -3px 0 0 ${displayColor}, 0 0 8px 2px ${glowColor}70`,
