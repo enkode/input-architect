@@ -5,6 +5,15 @@ import { getKeyLabel } from '../../utils/keycodes';
 import { clsx } from 'clsx';
 import { motion } from 'framer-motion';
 
+/** Returns true if a CSS rgb() color is light enough to need dark text */
+function isLightColor(color: string): boolean {
+    const m = color.match(/rgb\((\d+),(\d+),(\d+)\)/);
+    if (!m) return false;
+    // Relative luminance (sRGB)
+    const luminance = (+m[1] * 0.299 + +m[2] * 0.587 + +m[3] * 0.114);
+    return luminance > 140;
+}
+
 interface VirtualKeyboardProps {
     definition: VIAKeyboardDefinition;
     pressedKeys: string[];
@@ -92,14 +101,14 @@ export function VirtualKeyboard({ definition, pressedKeys, selectedKeyIndices, o
                                 "absolute rounded-md flex flex-col items-center justify-center font-semibold select-none transition-all duration-75 overflow-hidden",
                                 isSelected
                                     ? displayColor
-                                        ? "text-white border-2 border-white/80 z-10"
+                                        ? clsx("border-2 border-white/80 z-10", isLightColor(displayColor) ? "text-black" : "text-white")
                                         : "bg-primary text-white border-2 border-primary shadow-[0_0_15px_rgba(247,88,33,0.5)] z-10"
                                     : isPreview
                                         ? "bg-[#27272A] text-text-primary border border-primary/40 shadow-[0_0_8px_rgba(247,88,33,0.25)] z-10"
                                         : isPressed
                                             ? "bg-white text-black border border-white shadow-[0_0_10px_rgba(255,255,255,0.8)] z-20 scale-95"
                                             : displayColor
-                                                ? "bg-[#27272A] text-text-primary border border-transparent"
+                                                ? "bg-[#27272A] text-text-primary border-2 border-transparent"
                                                 : "bg-[#27272A] text-text-muted border border-black/40 hover:border-text-secondary hover:text-text-primary"
                             )}
                             style={{
@@ -113,6 +122,7 @@ export function VirtualKeyboard({ definition, pressedKeys, selectedKeyIndices, o
                                 } : {}),
                                 ...(displayColor && !isSelected && !isPreview && !isPressed ? {
                                     borderColor: displayColor,
+                                    backgroundColor: `color-mix(in srgb, ${displayColor} 20%, #27272A)`,
                                     boxShadow: `inset 0 -3px 0 0 ${displayColor}, 0 0 8px 2px ${glowColor}70`,
                                 } : {}),
                             }}
