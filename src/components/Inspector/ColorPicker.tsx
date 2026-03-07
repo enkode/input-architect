@@ -590,15 +590,15 @@ export function ColorPicker({ definition, selectedKeyIndices = [], onKeyColorCha
                         const dg = Math.round(color.g * scale);
                         const db = Math.round(color.b * scale);
                         return (
-                            <div className="w-24 h-24 rounded-full relative bg-gradient-to-tr from-blue-500 via-red-500 to-green-500 shadow-inner border border-white/10">
-                                <div
-                                    className="absolute inset-2 rounded-full bg-surface/80 backdrop-blur-sm flex items-center justify-center transition-colors duration-300"
-                                    style={{ backgroundColor: `rgba(${dr},${dg},${db}, 0.2)` }}
-                                >
-                                    <div
-                                        className="w-12 h-12 rounded-full shadow-[0_0_20px_rgba(255,255,255,0.2)] border-2 border-white/20 transition-colors duration-200"
-                                        style={{ backgroundColor: `rgb(${dr},${dg},${db})` }}
-                                    />
+                            <div
+                                className="w-24 h-24 rounded-full flex items-center justify-center transition-colors duration-300 border-2 border-white/10"
+                                style={{
+                                    backgroundColor: `rgb(${dr},${dg},${db})`,
+                                    boxShadow: `0 0 30px rgba(${dr},${dg},${db}, 0.6), inset 0 0 20px rgba(0,0,0,0.3)`,
+                                }}
+                            >
+                                <div className="text-[10px] font-mono font-bold text-white/90 drop-shadow-[0_1px_2px_rgba(0,0,0,0.8)]">
+                                    {dr},{dg},{db}
                                 </div>
                             </div>
                         );

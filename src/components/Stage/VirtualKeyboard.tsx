@@ -117,14 +117,14 @@ export function VirtualKeyboard({ definition, pressedKeys, selectedKeyIndices, o
                         <motion.button
                             key={key.id}
                             className={clsx(
-                                "absolute border rounded-md flex flex-col items-center justify-center font-semibold select-none transition-all duration-75 overflow-hidden",
+                                "absolute rounded-md flex flex-col items-center justify-center font-semibold select-none transition-all duration-75 overflow-hidden",
                                 isSelected
-                                    ? "bg-primary text-white border-primary shadow-[0_0_15px_rgba(247,88,33,0.5)] z-10"
+                                    ? "bg-primary text-white border-2 border-primary shadow-[0_0_15px_rgba(247,88,33,0.5)] z-10"
                                     : isPressed
-                                        ? "bg-white text-black border-white shadow-[0_0_10px_rgba(255,255,255,0.8)] z-20 scale-95"
+                                        ? "bg-white text-black border border-white shadow-[0_0_10px_rgba(255,255,255,0.8)] z-20 scale-95"
                                         : displayColor
-                                            ? "border-white/20 text-white/90"
-                                            : "bg-[#27272A] text-text-muted border-black/40 hover:border-text-secondary hover:text-text-primary"
+                                            ? "bg-[#27272A] text-text-primary border border-transparent"
+                                            : "bg-[#27272A] text-text-muted border border-black/40 hover:border-text-secondary hover:text-text-primary"
                             )}
                             style={{
                                 left: `${key.x * 50}px`,
@@ -132,8 +132,8 @@ export function VirtualKeyboard({ definition, pressedKeys, selectedKeyIndices, o
                                 width: `${key.w * 50 - 4}px`,
                                 height: `${key.h * 50 - 4}px`,
                                 ...(displayColor && !isSelected && !isPressed ? {
-                                    backgroundColor: displayColor,
-                                    boxShadow: keyColor ? `0 0 14px 2px ${displayColor}90` : `0 0 10px 1px ${displayColor}70`,
+                                    borderColor: displayColor,
+                                    boxShadow: `inset 0 -3px 0 0 ${displayColor}, 0 0 8px 0 ${displayColor}50`,
                                 } : {}),
                             }}
                             onClick={(e) => {
