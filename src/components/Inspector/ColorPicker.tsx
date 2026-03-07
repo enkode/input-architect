@@ -65,11 +65,11 @@ export function ColorPicker({ definition, selectedKeyIndices = [], onKeyColorCha
         }
     }, [selectedKeyIndices, isPerKeyMode]);
 
-    // Emit global color for virtual keyboard display (only in global mode, not per-key)
+    // Clear global color — the virtual keyboard should only show actual per-key colors,
+    // not the global backlight hue (which applies uniformly to the hardware)
     useEffect(() => {
-        if (!onGlobalColorChange) return;
-        onGlobalColorChange(isPerKeyMode ? null : `rgb(${color.r},${color.g},${color.b})`);
-    }, [color, isPerKeyMode, onGlobalColorChange]);
+        onGlobalColorChange?.(null);
+    }, [onGlobalColorChange]);
 
 
     const readDeviceState = async () => {

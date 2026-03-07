@@ -1,6 +1,6 @@
 [package]
 name = "input-architect"
-version = "0.12.4"
+version = "0.12.5"
 description = "Framework Laptop 16 Keyboard & Macropad Configurator"
 authors = ["enkode"]
 license = "MIT"
