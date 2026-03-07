@@ -13,7 +13,6 @@ interface KeyboardStageProps {
     onDeselectAll?: () => void;
     deviceKeymap?: number[];
     keyColors?: Record<number, string>;
-    globalColor?: string | null;
     shiftHoverPreviewIndices?: number[];
     onKeyHover?: (index: number | null) => void;
     activeMode?: string;
@@ -21,7 +20,7 @@ interface KeyboardStageProps {
     onPresetSelect?: (indices: number[], ctrl: boolean) => void;
 }
 
-export function KeyboardStage({ definition, pressedKeys, selectedKeyIndices, onKeySelect, onDeselectAll, deviceKeymap, keyColors, globalColor, shiftHoverPreviewIndices, onKeyHover, activeMode, presets, onPresetSelect }: KeyboardStageProps) {
+export function KeyboardStage({ definition, pressedKeys, selectedKeyIndices, onKeySelect, onDeselectAll, deviceKeymap, keyColors, shiftHoverPreviewIndices, onKeyHover, activeMode, presets, onPresetSelect }: KeyboardStageProps) {
     const containerRef = useRef<HTMLDivElement>(null);
 
     const isPresetActive = (preset: KeyPreset) =>
@@ -47,7 +46,6 @@ export function KeyboardStage({ definition, pressedKeys, selectedKeyIndices, onK
                         onKeySelect={onKeySelect}
                         deviceKeymap={deviceKeymap}
                         keyColors={keyColors}
-                        globalColor={globalColor}
                         shiftHoverPreviewIndices={shiftHoverPreviewIndices}
                         onKeyHover={onKeyHover}
                     />

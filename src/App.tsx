@@ -37,7 +37,8 @@ function App() {
   // Device State
   const [deviceKeymap, setDeviceKeymap] = useState<number[]>([]);
   const [keyColors, setKeyColors] = useState<Record<number, string>>({});
-  const [globalColor, setGlobalColor] = useState<string | null>(null);
+  // globalColor removed — showing VIA backlight color on individual keys was misleading
+  // (users thought it was per-key readback from hardware, which firmware doesn't support)
 
   // Input Handling for visual feedback
   const [pressedKeys, setPressedKeys] = useState<string[]>([]);
@@ -440,7 +441,6 @@ function App() {
             onKeyColorChange={handleKeyColorChange}
             keyColors={keyColors}
             onPerKeyColorsRestore={handlePerKeyColorsRestore}
-            onGlobalColorChange={setGlobalColor}
           />
         ) : (
           <div className="p-4 h-full flex items-center justify-center text-text-muted text-xs">
@@ -460,7 +460,6 @@ function App() {
           onDeselectAll={() => { setSelectedKeyIndices([]); setAnchorKeyIndex(null); }}
           deviceKeymap={deviceKeymap}
           keyColors={keyColors}
-          globalColor={globalColor}
           shiftHoverPreviewIndices={shiftHoverPreviewIndices}
           onKeyHover={setHoveredKeyIndex}
           activeMode={activeMode}

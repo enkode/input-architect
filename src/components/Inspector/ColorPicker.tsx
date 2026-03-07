@@ -14,10 +14,9 @@ interface ColorPickerProps {
     selectedKeyIndices?: number[];
     onKeyColorChange?: (indices: number[], color: string | null) => void;
     keyColors?: Record<number, string>;
-    onGlobalColorChange?: (color: string | null) => void;
 }
 
-export function ColorPicker({ definition, selectedKeyIndices = [], onKeyColorChange, keyColors, onGlobalColorChange }: ColorPickerProps) {
+export function ColorPicker({ definition, selectedKeyIndices = [], onKeyColorChange, keyColors }: ColorPickerProps) {
     const { hasPerKeyRGB, connectedProductId, restoreComplete } = useDevice();
 
     const [color, setColor] = useState({ r: 255, g: 0, b: 0 });
@@ -65,16 +64,10 @@ export function ColorPicker({ definition, selectedKeyIndices = [], onKeyColorCha
         }
     }, [selectedKeyIndices, isPerKeyMode]);
 
-    // Show global backlight color on virtual keyboard when in global mode (no per-key colors)
-    // and effect is "Solid Color" (effectId 1). Avoids bleeding onto per-key colored keys.
-    useEffect(() => {
-        const hasPerKeyColors = keyColors && Object.keys(keyColors).length > 0;
-        if (hasPerKeyColors || effectId !== 1) {
-            onGlobalColorChange?.(null);
-        } else {
-            onGlobalColorChange?.(`rgb(${color.r},${color.g},${color.b})`);
-        }
-    }, [color, effectId, keyColors, onGlobalColorChange]);
+    // Global backlight color is no longer emitted to individual keys on the virtual keyboard.
+    // Showing the VIA backlight color on every key was misleading — users thought it was
+    // per-key readback from hardware. Per-key colors are only shown when explicitly set
+    // through this app (stored in localStorage).
 
 
     const readDeviceState = async () => {

@@ -20,10 +20,9 @@ interface PropertyPanelProps {
     onKeyColorChange?: (indices: number[], color: string | null) => void;
     keyColors?: Record<number, string>;
     onPerKeyColorsRestore?: (colors: Record<number, string>) => void;
-    onGlobalColorChange?: (color: string | null) => void;
 }
 
-export function PropertyPanel({ activeMode, activeDefinition, selectedModuleId, selectedKeyIndices = [], selectedLayer = 0, onConfigRestore, onKeymapChange, onKeyColorChange, keyColors, onPerKeyColorsRestore, onGlobalColorChange }: PropertyPanelProps) {
+export function PropertyPanel({ activeMode, activeDefinition, selectedModuleId, selectedKeyIndices = [], selectedLayer = 0, onConfigRestore, onKeymapChange, onKeyColorChange, keyColors, onPerKeyColorsRestore }: PropertyPanelProps) {
     const [backupState, setBackupState] = useState<'idle' | 'backing-up' | 'done' | 'error'>('idle');
     const [backupProgress, setBackupProgress] = useState(0);
 
@@ -125,7 +124,6 @@ export function PropertyPanel({ activeMode, activeDefinition, selectedModuleId, 
                         selectedKeyIndices={selectedKeyIndices}
                         onKeyColorChange={onKeyColorChange}
                         keyColors={keyColors}
-                        onGlobalColorChange={onGlobalColorChange}
                     />
                     <ConfigHistory onPerKeyColorsRestore={onPerKeyColorsRestore} keyColors={keyColors} />
                 </>

@@ -21,12 +21,11 @@ interface VirtualKeyboardProps {
     onKeySelect: (index: number, modifiers: { ctrl: boolean; shift: boolean }) => void;
     deviceKeymap?: number[];
     keyColors?: Record<number, string>;
-    globalColor?: string | null;
     shiftHoverPreviewIndices?: number[];
     onKeyHover?: (index: number | null) => void;
 }
 
-export function VirtualKeyboard({ definition, pressedKeys, selectedKeyIndices, onKeySelect, deviceKeymap, keyColors, globalColor, shiftHoverPreviewIndices = [], onKeyHover }: VirtualKeyboardProps) {
+export function VirtualKeyboard({ definition, pressedKeys, selectedKeyIndices, onKeySelect, deviceKeymap, keyColors, shiftHoverPreviewIndices = [], onKeyHover }: VirtualKeyboardProps) {
 
     const renderableKeys = useMemo(() => parseKeyPositions(definition), [definition]);
 
@@ -73,7 +72,7 @@ export function VirtualKeyboard({ definition, pressedKeys, selectedKeyIndices, o
                     const isPreview = !isSelected && shiftHoverPreviewIndices.includes(idx);
                     const isPressed = key.code && pressedKeys.includes(key.code);
                     const keyColor = keyColors?.[idx];
-                    const displayColor = keyColor ?? globalColor ?? null;
+                    const displayColor = keyColor ?? null;
                     // Boost glow for very dim colors so they're still visible
                     let glowColor = displayColor;
                     if (displayColor) {
