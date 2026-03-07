@@ -65,11 +65,16 @@ export function ColorPicker({ definition, selectedKeyIndices = [], onKeyColorCha
         }
     }, [selectedKeyIndices, isPerKeyMode]);
 
-    // Clear global color — the virtual keyboard should only show actual per-key colors,
-    // not the global backlight hue (which applies uniformly to the hardware)
+    // Show global backlight color on virtual keyboard when in global mode (no per-key colors)
+    // and effect is "Solid Color" (effectId 1). Avoids bleeding onto per-key colored keys.
     useEffect(() => {
-        onGlobalColorChange?.(null);
-    }, [onGlobalColorChange]);
+        const hasPerKeyColors = keyColors && Object.keys(keyColors).length > 0;
+        if (hasPerKeyColors || effectId !== 1) {
+            onGlobalColorChange?.(null);
+        } else {
+            onGlobalColorChange?.(`rgb(${color.r},${color.g},${color.b})`);
+        }
+    }, [color, effectId, keyColors, onGlobalColorChange]);
 
 
     const readDeviceState = async () => {
@@ -120,7 +125,6 @@ export function ColorPicker({ definition, selectedKeyIndices = [], onKeyColorCha
     useEffect(() => {
         if (!restoreComplete || !hid.isDeviceConnected()) return;
         readDeviceState();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [restoreComplete]);
 
 
@@ -724,8 +728,33 @@ export function ColorPicker({ definition, selectedKeyIndices = [], onKeyColorCha
                     )}
                 </button>
                 <button
-                    onClick={readDeviceState}
-                    title="Read current state from device"
+                    onClick={async () => {
+                        await readDeviceState();
+                        // Also re-apply stored per-key colors to hardware
+                        if (hasPerKeyRGB && connectedProductId !== null && definition) {
+                            const stored = storageService.loadDeviceState(connectedProductId);
+                            if (stored?.perKeyColors && Object.keys(stored.perKeyColors).length > 0) {
+                                log.rgb('Re-applying stored per-key colors to device...');
+                                const enabled = await hid.enablePerKeyMode();
+                                if (enabled) {
+                                    const colorGroups: Record<string, number[]> = {};
+                                    for (const [keyIdx, color] of Object.entries(stored.perKeyColors)) {
+                                        if (!colorGroups[color]) colorGroups[color] = [];
+                                        colorGroups[color].push(Number(keyIdx));
+                                    }
+                                    for (const [colorStr, keyIndices] of Object.entries(colorGroups)) {
+                                        const match = colorStr.match(/rgb\((\d+),(\d+),(\d+)\)/);
+                                        if (!match) continue;
+                                        const [, cr, cg, cb] = match.map(Number);
+                                        const ledIndices = keyIndices.flatMap(idx => definition.ledIndices[idx] ?? []);
+                                        if (ledIndices.length > 0) await hid.setPerKeyColor(cr, cg, cb, ledIndices);
+                                    }
+                                    log.rgb('Per-key colors re-applied');
+                                }
+                            }
+                        }
+                    }}
+                    title="Refresh state from device and re-apply per-key colors"
                     className="px-3 py-2 rounded-lg text-xs bg-surface-highlight hover:bg-primary hover:text-white transition-all"
                 >
                     <RefreshCw size={14} />

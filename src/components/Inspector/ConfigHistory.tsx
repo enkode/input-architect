@@ -45,6 +45,20 @@ export function ConfigHistory({ onPerKeyColorsRestore, keyColors }: ConfigHistor
         if (restoringId || connectedProductId === null) return;
         setRestoringId(snapshot.id);
         try {
+            // Save a "before restore" snapshot so the user can undo
+            const currentBrightness = await hid.getRGBBrightness();
+            const currentEffect = await hid.getRGBEffect();
+            const currentSpeed = await hid.getRGBEffectSpeed();
+            const currentColor = await hid.getRGBColor();
+            const currentRgb = currentBrightness !== null && currentEffect !== null && currentSpeed !== null && currentColor !== null
+                ? { brightness: currentBrightness, effectId: currentEffect, speed: currentSpeed, hue: currentColor[0], saturation: currentColor[1] }
+                : undefined;
+            storageService.saveSnapshot(connectedProductId, {
+                label: `Before restore: ${snapshot.label}`,
+                rgbSettings: currentRgb,
+                perKeyColors: keyColors && Object.keys(keyColors).length > 0 ? keyColors : undefined,
+            });
+
             if (snapshot.rgbSettings) {
                 const { brightness, effectId, speed, hue, saturation } = snapshot.rgbSettings;
                 await hid.setRGBBrightness(brightness);
@@ -59,6 +73,9 @@ export function ConfigHistory({ onPerKeyColorsRestore, keyColors }: ConfigHistor
             if (snapshot.perKeyColors && onPerKeyColorsRestore) {
                 onPerKeyColorsRestore(snapshot.perKeyColors);
             }
+
+            // Refresh the snapshot list to show the new "before restore" entry
+            setSnapshots(storageService.loadSnapshots(connectedProductId));
         } catch (err) {
             log.errorConfig(`Restore failed: ${err}`);
         } finally {

@@ -5,6 +5,7 @@ import { RapidTriggerControl } from './RapidTriggerControl';
 import { ConfigHistory } from './ConfigHistory';
 import { Settings2, Download, Upload, CheckCircle2 } from 'lucide-react';
 import { configService } from '../../services/ConfigService';
+import { log } from '../../services/Logger';
 import { clsx } from 'clsx';
 import type { VIAKeyboardDefinition } from '../../types/via';
 
@@ -56,12 +57,12 @@ export function PropertyPanel({ activeMode, activeDefinition, selectedModuleId, 
                 setBackupState('done');
                 setTimeout(() => setBackupState('idle'), 2000);
             } else {
-                alert("Backup failed. Is a device connected?");
+                log.warnConfig('Backup failed — no device connected or read error');
                 setBackupState('error');
                 setTimeout(() => setBackupState('idle'), 2000);
             }
         } catch (err) {
-            console.error('Backup failed:', err);
+            log.errorConfig(`Backup failed: ${err}`);
             setBackupState('error');
             setTimeout(() => setBackupState('idle'), 2000);
         }
@@ -86,7 +87,7 @@ export function PropertyPanel({ activeMode, activeDefinition, selectedModuleId, 
                     onConfigRestore?.();
                 }
             } catch {
-                alert("Invalid Config File");
+                log.warnConfig('Invalid config file — could not parse JSON');
             }
         };
         input.click();

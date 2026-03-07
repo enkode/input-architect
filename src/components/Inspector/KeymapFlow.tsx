@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import { hid } from '../../services/HIDService';
+import { log } from '../../services/Logger';
 import type { VIAKeyboardDefinition } from '../../types/via';
 import { clsx } from 'clsx';
 import { Save } from 'lucide-react';
@@ -44,7 +45,7 @@ export function KeymapFlow({ definition, selectedKeyIndices, selectedLayer, onKe
     const handleApply = async () => {
         if (pendingKeycode === null || !definition) return;
         if (selectedKeyIndices.length === 0) {
-            alert("No keys selected!");
+            log.warnHid('No keys selected for keycode assignment');
             return;
         }
 
@@ -52,11 +53,11 @@ export function KeymapFlow({ definition, selectedKeyIndices, selectedLayer, onKe
             const pos = definition.matrixPositions[idx];
             if (pos) {
                 const [row, col] = pos;
-                console.log(`Setting Key: Layer ${selectedLayer}, Row ${row}, Col ${col} -> 0x${pendingKeycode.toString(16)}`);
+                log.hid(`Setting Key: Layer ${selectedLayer}, Row ${row}, Col ${col} -> 0x${pendingKeycode.toString(16)}`);
                 await hid.setKeycode(selectedLayer, row, col, pendingKeycode);
                 const readBack = await hid.getKeycode(selectedLayer, row, col);
                 if (readBack !== pendingKeycode) {
-                    console.warn(`Keycode verify failed: wrote 0x${pendingKeycode.toString(16)}, read 0x${readBack?.toString(16)}`);
+                    log.warnHid(`Keycode verify failed: wrote 0x${pendingKeycode.toString(16)}, read 0x${readBack?.toString(16)}`);
                 }
             }
         }

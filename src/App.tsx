@@ -144,7 +144,7 @@ function App() {
 
     // Auto-restore saved settings once per connection session
     if (isConnected && !perKeyRestoredRef.current && connectedProductId !== null && activeDefinition) {
-      perKeyRestoredRef.current = true;
+      perKeyRestoredRef.current = true; // Prevent duplicate triggers during this connection session
       const stored = storageService.loadDeviceState(connectedProductId);
 
       // Snapshot current stored state as "Session start" for history
@@ -178,6 +178,8 @@ function App() {
           }
         } catch (err) {
           log.errorConfig(`Failed to restore settings: ${err}`);
+          // Allow retry on next reconnect if restore failed
+          perKeyRestoredRef.current = false;
         } finally {
           markRestoreComplete();
         }
@@ -187,7 +189,7 @@ function App() {
       // Already restored in this session (e.g. layer change re-trigger)
       markRestoreComplete();
     }
-  }, [isConnected, selectedLayer, activeDefinition]);
+  }, [isConnected, selectedLayer, activeDefinition, connectedProductId, hasPerKeyRGB, markRestoreComplete]);
 
   const handleKeyColorChange = (indices: number[], color: string | null) => {
     setKeyColors(prev => {
@@ -408,7 +410,7 @@ function App() {
             <>
               <NavigationMenu activeMode={activeMode} onModeSelect={setActiveMode} />
               <div className="flex-1" />
-              {(activeMode === 'mapping' || activeMode === 'lighting') && (
+              {activeMode === 'mapping' && (
                 <LayerSelector selectedLayer={selectedLayer} onLayerSelect={setSelectedLayer} />
               )}
             </>

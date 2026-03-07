@@ -50,8 +50,9 @@ export function parseKeyPositions(definition: VIAKeyboardDefinition): KeyPositio
 }
 
 /**
- * Get all key indices between an anchor and target on the same row.
- * Returns only [targetIdx] if keys are on different rows.
+ * Get all key indices between an anchor and target.
+ * If same row, selects the horizontal range between them.
+ * If different rows, selects all keys on all rows between anchor and target (inclusive).
  */
 export function getRowRangeIndices(
     anchorIdx: number,
@@ -61,12 +62,20 @@ export function getRowRangeIndices(
     const anchor = keys[anchorIdx];
     const target = keys[targetIdx];
     if (!anchor || !target) return [targetIdx];
-    if (anchor.y !== target.y) return [targetIdx];
 
-    const minX = Math.min(anchor.x, target.x);
-    const maxX = Math.max(anchor.x + anchor.w, target.x + target.w);
+    if (anchor.y === target.y) {
+        // Same row: horizontal range
+        const minX = Math.min(anchor.x, target.x);
+        const maxX = Math.max(anchor.x + anchor.w, target.x + target.w);
+        return keys
+            .filter(k => k.y === anchor.y && k.x >= minX && k.x < maxX)
+            .map(k => k.index);
+    }
 
+    // Cross-row: select all keys on rows between anchor and target (inclusive)
+    const minY = Math.min(anchor.y, target.y);
+    const maxY = Math.max(anchor.y, target.y);
     return keys
-        .filter(k => k.y === anchor.y && k.x >= minX && k.x < maxX)
+        .filter(k => k.y >= minY && k.y <= maxY)
         .map(k => k.index);
 }

@@ -83,7 +83,7 @@ Open **http://localhost:5173** in Chrome 89+ or Edge 89+ (WebHID required).
 - **Built-in effects** — Off, Solid Color, and Breathing (the effects reliably supported by Framework firmware)
 - **Per-key RGB control** — set individual key colors with the [nucleardog firmware](#custom-firmware)
 - **Contextual per-key mode** — automatically activates when you select keys, returns to global mode when you deselect
-- **Shift+click range selection** — click a key, then Shift+click another on the same row to select the entire range; shows a hover preview while holding Shift
+- **Shift+click range selection** — click a key, then Shift+click another to select the entire range; works across rows too (selects all keys on rows between anchor and target)
 - **Ctrl+click multi-select** — toggle individual keys in and out of the current selection
 - **Key group presets** — one-click selection of Letters, Numbers, F-Keys, WASD, FPS Kit, MOBA, Arrows, and Modifiers; Ctrl+click presets to combine groups
 - **Per-key brightness** — independent brightness slider for selected keys
@@ -196,7 +196,7 @@ npm run tauri:build
 
 **Per-Key Mode** (requires [custom firmware](#custom-firmware)):
 1. Click any key on the virtual keyboard — per-key mode activates automatically
-2. **Shift+click** another key on the same row to select the entire range (a hover preview shows which keys will be selected)
+2. **Shift+click** another key to select the entire range — works across rows (selects all keys between the two rows)
 3. **Ctrl+click** to toggle individual keys in or out of the selection
 4. Use the **preset chips** below the keyboard to quickly select key groups (Letters, Numbers, F-Keys, WASD, FPS Kit, MOBA, Arrows, Mods); Ctrl+click presets to combine groups
 5. Adjust the R, G, B sliders and brightness — colors update in real time on the hardware
@@ -345,7 +345,7 @@ src/
 - `0x00` — Query per-key RGB support
 - `0x01` — Enable per-key mode
 - `0x02` — Disable per-key mode
-- `0x10` — Set LED colors (batch, up to 25 LEDs per packet)
+- `0x10` — Set LED colors (batch, up to 10 LEDs per packet)
 
 ### Tech Stack
 

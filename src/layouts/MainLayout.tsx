@@ -1,11 +1,6 @@
 import React, { useState } from 'react';
 import { PanelLeft, PanelRight } from 'lucide-react';
 import { clsx } from 'clsx';
-import { twMerge } from 'tailwind-merge';
-
-export function cn(...inputs: (string | undefined | null | false)[]) {
-    return twMerge(clsx(inputs));
-}
 
 interface MainLayoutProps {
     children?: React.ReactNode;
