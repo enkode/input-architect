@@ -82,13 +82,35 @@ Open **http://localhost:5173** in Chrome 89+ or Edge 89+ (WebHID required).
 ### RGB Lighting
 - **28+ built-in effects** — Solid Color, Breathing, Rainbow, Heatmap, Digital Rain, and more
 - **Per-key RGB control** — set individual key colors with the [nucleardog firmware](#custom-firmware)
+- **Contextual per-key mode** — automatically activates when you select keys, returns to global mode when you deselect
+- **Shift+click range selection** — click a key, then Shift+click another on the same row to select the entire range; shows a hover preview while holding Shift
+- **Ctrl+click multi-select** — toggle individual keys in and out of the current selection
 - **Per-key brightness** — independent brightness slider for selected keys
+- **Editable slider values** — click the number next to any slider to type an exact value
 - **Global controls** — brightness, effect speed, and color
 - **HSV and RGB** color pickers with live preview
+- **Dim key glow** — very dim per-key colors still show a subtle glow on the virtual keyboard
+- **Per-key mode cleanup** — LEDs return to normal animations when the app closes or disconnects
 - **Save to device** — persist settings in keyboard EEPROM
 
+### Config History & Snapshots
+- **Automatic snapshots** — lighting config is auto-saved on save, reset, and session start
+- **Named saves** — create manual snapshots with custom names for easy identification
+- **Restore any snapshot** — roll back to any previous lighting configuration with one click
+- **Export as JSON** — export snapshots for backup or sharing
+- **Available everywhere** — accessible from both the Lighting and Settings pages
+
+### Device Management
+- **Multi-device quick switching** — grant access to keyboard and macropad separately, then switch between them with one click
+- **Auto-reconnect** — automatically reconnects to your device after sleep/wake cycles
+- **Firmware detection** — the Firmware page shows your currently installed firmware type with guidance on available options
+
+### Diagnostics
+- **LED diagnostics** — test LEDs with a white/red/green/blue flash sequence, then report whether all, some, or none lit up; auto-troubleshooting suggests quick fixes
+- **Health check** — tests HID connection, protocol version, RGB read/write, EEPROM save, and per-key support in one pass
+
 ### Firmware Management
-- **Guided 5-step flash workflow** — Select → Download → Bootloader → Flash → Reconnect
+- **Guided 5-step flash workflow** — Select, Download, Bootloader, Flash, Reconnect
 - **UF2 file validator** — checks magic bytes, RP2040 family ID, flash address range, block integrity
 - **One-click build script** — automatically clones, installs QMK MSYS, compiles, and delivers firmware
 - **Interactive device detection** — build script scans USB and shows connected Framework devices
@@ -149,6 +171,7 @@ npm run tauri:build
 1. Click **Connect Your Device** (or the **Connect** button in the sidebar)
 2. The browser will show a device picker — select your Framework keyboard or macropad
 3. The app automatically detects the VIA protocol version and per-key RGB support
+4. To use multiple devices, grant access to each one separately and switch between them with one click in the sidebar
 
 ### Remapping Keys
 
@@ -156,7 +179,7 @@ npm run tauri:build
 2. Click a key on the virtual keyboard to select it
 3. Choose a new keycode from the inspector panel on the right
 4. Click **Apply** — the change is written to the device immediately
-5. Use the **Layer Selector** at the bottom-left to switch between layers (0–5)
+5. Use the **Layer Selector** at the bottom-left to switch between layers (0-5)
 
 ### Controlling RGB Lighting
 
@@ -166,16 +189,28 @@ npm run tauri:build
 3. Click **Save to Device** to persist changes
 
 **Per-Key Mode** (requires [custom firmware](#custom-firmware)):
-1. Toggle **Per-Key Color** on
-2. Click one or more keys on the virtual keyboard (Shift+click for multi-select)
-3. Adjust the R, G, B sliders and brightness
-4. Colors update in real time on the hardware
+1. Click any key on the virtual keyboard — per-key mode activates automatically
+2. **Shift+click** another key on the same row to select the entire range (a hover preview shows which keys will be selected)
+3. **Ctrl+click** to toggle individual keys in or out of the selection
+4. Adjust the R, G, B sliders and brightness — colors update in real time on the hardware
+5. Click the number next to any slider to type an exact value
+6. Deselect all keys to return to global mode
+7. When the app closes or disconnects, LEDs return to their normal animations
+
+### Managing Config History
+
+1. Open the **Config History** panel from the Lighting or Settings page
+2. Snapshots are created automatically when you save, reset, or start a session
+3. Click **Save Snapshot** to create a named save you can identify later
+4. Click any snapshot to restore it
+5. Use the **Export** button to download snapshots as a JSON file
 
 ### Flashing Firmware
 
 1. Navigate to the **Firmware** tab
-2. Select a firmware from the catalog
-3. Follow the guided workflow:
+2. The page shows your currently installed firmware type and available options
+3. Select a firmware from the catalog
+4. Follow the guided workflow:
    - **Download** — get the `.uf2` file (or use the auto-build script)
    - **Bootloader** — put your device into bootloader mode (appears as `RPI-RP2` USB drive)
    - **Flash** — drag the `.uf2` file onto the drive
@@ -250,31 +285,33 @@ src/
 │   ├── Stage/                  # Center — keyboard visualization
 │   │   ├── KeyboardStage.tsx   # Keyboard container
 │   │   ├── VirtualKeyboard.tsx # Key layout renderer (from VIA JSON)
-│   │   └── Key.tsx             # Individual key (selection, animation)
+│   │   └── Key.tsx             # Individual key (selection, animation, dim glow)
 │   │
 │   ├── Inspector/              # Right panel — configuration
 │   │   ├── PropertyPanel.tsx   # Mode router (mapping/lighting/macros)
 │   │   ├── KeymapFlow.tsx      # Keycode selector & apply flow
 │   │   ├── ColorPicker.tsx     # RGB/HSV picker, per-key & global controls
+│   │   ├── ConfigHistory.tsx   # Snapshot list, restore, export
 │   │   ├── LEDMatrixControls.tsx  # Serial LED matrix (expansion cards)
 │   │   └── RapidTriggerControl.tsx # Analog actuation (stub)
 │   │
 │   ├── Sidebar/                # Left panel — navigation
 │   │   ├── NavigationMenu.tsx  # Mode tabs (Mapping/Lighting/Firmware/...)
 │   │   ├── LayerSelector.tsx   # Layer picker (0–5)
-│   │   └── ModuleList.tsx      # Device module selector
+│   │   └── ModuleList.tsx      # Device module selector & multi-device switcher
 │   │
 │   └── Firmware/               # Firmware management
 │       ├── FirmwareStage.tsx   # 5-step guided flash workflow
-│       └── FirmwarePanel.tsx   # Firmware catalog & info
+│       └── FirmwarePanel.tsx   # Firmware catalog, detection & info
 │
 ├── services/
 │   ├── HIDService.ts           # WebHID — VIA protocol, per-key RGB
 │   ├── SerialService.ts        # WebSerial — LED matrix modules
-│   └── ConfigService.ts        # High-level keymap read/write
+│   ├── ConfigService.ts        # High-level keymap read/write
+│   └── StorageService.ts       # Config history, snapshots, localStorage persistence
 │
 ├── context/
-│   └── DeviceContext.tsx        # React context — device state
+│   └── DeviceContext.tsx        # React context — device state, auto-reconnect
 │
 ├── data/
 │   ├── definitions/
@@ -287,6 +324,7 @@ src/
 │
 └── utils/
     ├── keycodes.ts             # QMK keycode map & labels
+    ├── keyboardLayout.ts       # Key position utilities & row detection
     ├── uf2.ts                  # UF2 file format validator
     └── build-script.ts         # Firmware build script generator
 ```

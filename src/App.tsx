@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useRef, useMemo } from 'react';
 import { MainLayout } from './layouts/MainLayout';
 import { KeyboardStage } from './components/Stage/KeyboardStage';
 import { PropertyPanel } from './components/Inspector/PropertyPanel';
@@ -12,6 +12,7 @@ import { useDevice } from './context/DeviceContext';
 import { configService } from './services/ConfigService';
 import { storageService } from './services/StorageService';
 import { hid, type HealthCheckResult } from './services/HIDService';
+import { parseKeyPositions, getRowRangeIndices } from './utils/keyboardLayout';
 import type { VIAKeyboardDefinition } from './types/via';
 import { clsx } from 'clsx';
 import { Stethoscope, ChevronDown, Plus } from 'lucide-react';
@@ -37,6 +38,11 @@ function App() {
 
   // Input Handling for visual feedback
   const [pressedKeys, setPressedKeys] = useState<string[]>([]);
+  const [isShiftHeld, setIsShiftHeld] = useState(false);
+
+  // Shift-click range selection
+  const [anchorKeyIndex, setAnchorKeyIndex] = useState<number | null>(null);
+  const [hoveredKeyIndex, setHoveredKeyIndex] = useState<number | null>(null);
 
   // Health check
   const [healthResult, setHealthResult] = useState<HealthCheckResult | null>(null);
@@ -49,19 +55,33 @@ function App() {
 
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Shift') setIsShiftHeld(true);
       if (!e.repeat) setPressedKeys(prev => [...prev, e.code]);
     };
     const handleKeyUp = (e: KeyboardEvent) => {
+      if (e.key === 'Shift') setIsShiftHeld(false);
       setPressedKeys(prev => prev.filter(k => k !== e.code));
     };
+    const handleBlur = () => setIsShiftHeld(false);
 
     window.addEventListener('keydown', handleKeyDown);
     window.addEventListener('keyup', handleKeyUp);
+    window.addEventListener('blur', handleBlur);
     return () => {
       window.removeEventListener('keydown', handleKeyDown);
       window.removeEventListener('keyup', handleKeyUp);
+      window.removeEventListener('blur', handleBlur);
     };
   }, []);
+
+  // Compute shift-hover preview indices
+  const shiftHoverPreviewIndices = useMemo(() => {
+    if (!isShiftHeld || anchorKeyIndex === null || hoveredKeyIndex === null || !activeDefinition) {
+      return [];
+    }
+    const keys = parseKeyPositions(activeDefinition);
+    return getRowRangeIndices(anchorKeyIndex, hoveredKeyIndex, keys);
+  }, [isShiftHeld, anchorKeyIndex, hoveredKeyIndex, activeDefinition]);
 
   // Reset per-key restore flag on disconnect
   useEffect(() => {
@@ -204,15 +224,23 @@ function App() {
     }
   };
 
-  const handleKeySelect = (index: number, isMulti: boolean) => {
-    setSelectedKeyIndices(prev => {
-      if (isMulti) {
-        return prev.includes(index)
-          ? prev.filter(i => i !== index)
-          : [...prev, index];
-      }
-      return [index];
-    });
+  const handleKeySelect = (index: number, modifiers: { ctrl: boolean; shift: boolean }) => {
+    if (modifiers.shift && anchorKeyIndex !== null && activeDefinition) {
+      // Shift-click: select range on same row
+      const keys = parseKeyPositions(activeDefinition);
+      const rangeIndices = getRowRangeIndices(anchorKeyIndex, index, keys);
+      setSelectedKeyIndices(rangeIndices);
+    } else if (modifiers.ctrl) {
+      // Ctrl-click: toggle individual key
+      setSelectedKeyIndices(prev =>
+        prev.includes(index) ? prev.filter(i => i !== index) : [...prev, index]
+      );
+      setAnchorKeyIndex(index);
+    } else {
+      // Plain click: select single key, set as anchor
+      setSelectedKeyIndices([index]);
+      setAnchorKeyIndex(index);
+    }
   };
 
   return (
@@ -391,10 +419,12 @@ function App() {
           pressedKeys={pressedKeys}
           selectedKeyIndices={selectedKeyIndices}
           onKeySelect={handleKeySelect}
-          onDeselectAll={() => setSelectedKeyIndices([])}
+          onDeselectAll={() => { setSelectedKeyIndices([]); setAnchorKeyIndex(null); }}
           deviceKeymap={deviceKeymap}
           keyColors={keyColors}
           globalColor={globalColor}
+          shiftHoverPreviewIndices={shiftHoverPreviewIndices}
+          onKeyHover={setHoveredKeyIndex}
         />
       ) : (
         <div className="w-full h-full flex flex-col items-center justify-center gap-6 text-center">

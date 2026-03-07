@@ -7,14 +7,16 @@ interface KeyboardStageProps {
     definition: VIAKeyboardDefinition;
     pressedKeys: string[];
     selectedKeyIndices: number[];
-    onKeySelect: (index: number, isMulti: boolean) => void;
+    onKeySelect: (index: number, modifiers: { ctrl: boolean; shift: boolean }) => void;
     onDeselectAll?: () => void;
     deviceKeymap?: number[];
     keyColors?: Record<number, string>;
     globalColor?: string | null;
+    shiftHoverPreviewIndices?: number[];
+    onKeyHover?: (index: number | null) => void;
 }
 
-export function KeyboardStage({ definition, pressedKeys, selectedKeyIndices, onKeySelect, onDeselectAll, deviceKeymap, keyColors, globalColor }: KeyboardStageProps) {
+export function KeyboardStage({ definition, pressedKeys, selectedKeyIndices, onKeySelect, onDeselectAll, deviceKeymap, keyColors, globalColor, shiftHoverPreviewIndices, onKeyHover }: KeyboardStageProps) {
     const containerRef = useRef<HTMLDivElement>(null);
 
     return (
@@ -38,6 +40,8 @@ export function KeyboardStage({ definition, pressedKeys, selectedKeyIndices, onK
                         deviceKeymap={deviceKeymap}
                         keyColors={keyColors}
                         globalColor={globalColor}
+                        shiftHoverPreviewIndices={shiftHoverPreviewIndices}
+                        onKeyHover={onKeyHover}
                     />
                 </div>
             </div>

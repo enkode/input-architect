@@ -133,13 +133,16 @@ export function PropertyPanel({ activeMode, activeDefinition, selectedModuleId, 
             )}
 
             {activeMode === 'lighting' && (
-                <ColorPicker
-                    definition={activeDefinition}
-                    selectedKeyIndices={selectedKeyIndices}
-                    onKeyColorChange={onKeyColorChange}
-                    keyColors={keyColors}
-                    onGlobalColorChange={onGlobalColorChange}
-                />
+                <>
+                    <ColorPicker
+                        definition={activeDefinition}
+                        selectedKeyIndices={selectedKeyIndices}
+                        onKeyColorChange={onKeyColorChange}
+                        keyColors={keyColors}
+                        onGlobalColorChange={onGlobalColorChange}
+                    />
+                    <ConfigHistory onPerKeyColorsRestore={onPerKeyColorsRestore} keyColors={keyColors} />
+                </>
             )}
 
             {activeMode === 'settings' && (
