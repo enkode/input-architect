@@ -1,29 +1,12 @@
 import { useState, useEffect } from 'react';
 import { storageService, type ConfigSnapshot } from '../../services/StorageService';
 import { hid } from '../../services/HIDService';
+import { log } from '../../services/Logger';
 import { useDevice } from '../../context/DeviceContext';
 import { FRAMEWORK_RGB_EFFECTS } from '../../data/definitions/framework16';
+import { hsvToRgb } from '../../utils/color';
 import { RotateCcw, Trash2, Download, Clock, ChevronDown, Save } from 'lucide-react';
 import { clsx } from 'clsx';
-
-function hsvToRgb(h: number, s: number, _v: number): [number, number, number] {
-    h = h / 255; s = s / 255; const v = _v / 255;
-    let r = 0, g = 0, b = 0;
-    const i = Math.floor(h * 6);
-    const f = h * 6 - i;
-    const p = v * (1 - s);
-    const q = v * (1 - f * s);
-    const t = v * (1 - (1 - f) * s);
-    switch (i % 6) {
-        case 0: r = v; g = t; b = p; break;
-        case 1: r = q; g = v; b = p; break;
-        case 2: r = p; g = v; b = t; break;
-        case 3: r = p; g = q; b = v; break;
-        case 4: r = t; g = p; b = v; break;
-        case 5: r = v; g = p; b = q; break;
-    }
-    return [Math.round(r * 255), Math.round(g * 255), Math.round(b * 255)];
-}
 
 function formatTimestamp(ts: number): string {
     const date = new Date(ts);
@@ -77,7 +60,7 @@ export function ConfigHistory({ onPerKeyColorsRestore, keyColors }: ConfigHistor
                 onPerKeyColorsRestore(snapshot.perKeyColors);
             }
         } catch (err) {
-            console.error('Restore failed:', err);
+            log.errorConfig(`Restore failed: ${err}`);
         } finally {
             setRestoringId(null);
         }
@@ -121,7 +104,7 @@ export function ConfigHistory({ onPerKeyColorsRestore, keyColors }: ConfigHistor
             setSavingName('');
             setShowSaveInput(false);
         } catch (err) {
-            console.error('Manual save failed:', err);
+            log.errorConfig(`Manual save failed: ${err}`);
         } finally {
             setSaving(false);
         }
@@ -196,7 +179,7 @@ export function ConfigHistory({ onPerKeyColorsRestore, keyColors }: ConfigHistor
                         <div className="space-y-1.5 max-h-64 overflow-auto">
                             {reversed.map(snapshot => {
                                 const effect = snapshot.rgbSettings
-                                    ? FRAMEWORK_RGB_EFFECTS.find(e => e.id === snapshot.rgbSettings!.effectId)
+                                    ? FRAMEWORK_RGB_EFFECTS.find(e => e.id === snapshot.rgbSettings?.effectId)
                                     : null;
                                 const [cr, cg, cb] = snapshot.rgbSettings
                                     ? hsvToRgb(snapshot.rgbSettings.hue, snapshot.rgbSettings.saturation, 255)

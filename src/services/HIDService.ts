@@ -1,5 +1,7 @@
 /// <reference types="w3c-web-hid" />
 
+import { log } from './Logger';
+
 // VIA Protocol Constants (from quantum/via.h)
 const VIA_GET_PROTOCOL_VERSION       = 0x01;
 const VIA_DYNAMIC_KEYMAP_GET_KEYCODE = 0x04;
@@ -77,10 +79,12 @@ export class HIDService {
             if (this.isConnected || this._reconnecting) return;
             if (!SUPPORTED_VIDS.includes(d.vendorId)) return;
             if (!d.collections?.some(c => c.usagePage === RAW_HID_USAGE_PAGE && c.usage === RAW_HID_USAGE)) return;
-            console.log(`HID: Device reconnected after sleep/wake: ${d.productName} (PID: 0x${d.productId.toString(16)})`);
+            log.device(`Device reconnected after sleep/wake: ${d.productName} (PID: 0x${d.productId.toString(16)})`);
             this._reconnecting = true;
             try {
                 await this.openDevice(d);
+            } catch (err) {
+                log.errorDevice(`Reconnect failed: ${err}`);
             } finally {
                 this._reconnecting = false;
             }
@@ -107,7 +111,7 @@ export class HIDService {
                 return await this.openDevice(devices[0]);
             }
         } catch (err) {
-            console.error("Failed to connect HID:", err);
+            log.errorHid(`Failed to connect: ${err}`);
         }
         return false;
     }
@@ -167,12 +171,12 @@ export class HIDService {
             // Detect per-key RGB firmware support (nucleardog rgb_remote)
             this._hasPerKeySupport = await this.detectPerKeySupport();
 
-            console.log(`HID Device connected: ${this.device.productName} (PID: 0x${device.productId.toString(16)}, VIA Protocol: ${this.protocolVersion}${this.isV3 ? ' [V3]' : ' [V2]'}, Per-Key RGB: ${this._hasPerKeySupport ? 'YES' : 'NO'})`);
+            log.device(`Connected: ${this.device.productName} (PID: 0x${device.productId.toString(16)}, VIA: ${this.protocolVersion}${this.isV3 ? ' [V3]' : ' [V2]'}, Per-Key: ${this._hasPerKeySupport ? 'YES' : 'NO'})`);
 
             this.notifyListeners();
             return true;
         } catch (err) {
-            console.error("Failed to open HID device:", err);
+            log.errorDevice(`Failed to open device: ${err}`);
             return false;
         }
     }
@@ -198,43 +202,54 @@ export class HIDService {
         }
 
         const hexData = Array.from(packet.slice(0, Math.max(data.length + 1, 4))).map(b => b.toString(16).padStart(2, '0')).join(' ');
-        console.log(`HID TX: [${hexData}]`);
+        log.hid(`TX: [${hexData}]`);
+
+        // Track listener and timeout for cleanup on error
+        let listenerRef: ((event: HIDInputReportEvent) => void) | null = null;
+        let timeoutRef: ReturnType<typeof setTimeout> | null = null;
 
         try {
             // Set up listener BEFORE sending to avoid race condition
             const responsePromise = new Promise<DataView | null>((resolve) => {
                 if (!this.device) return resolve(null);
 
-                const timeoutId = setTimeout(() => {
-                    this.device?.removeEventListener('inputreport', listener);
-                    console.warn(`HID RX: (timeout for cmd 0x${commandId.toString(16).padStart(2, '0')})`);
+                timeoutRef = setTimeout(() => {
+                    if (listenerRef) this.device?.removeEventListener('inputreport', listenerRef);
+                    listenerRef = null;
+                    log.warnHid(`RX: timeout for cmd 0x${commandId.toString(16).padStart(2, '0')}`);
                     resolve(null);
                 }, 1000);
 
-                const listener = (event: HIDInputReportEvent) => {
+                listenerRef = (event: HIDInputReportEvent) => {
                     if (event.reportId === 0x00 || event.reportId === 0) {
-                        clearTimeout(timeoutId);
-                        this.device?.removeEventListener('inputreport', listener);
+                        if (timeoutRef) clearTimeout(timeoutRef);
+                        if (listenerRef) this.device?.removeEventListener('inputreport', listenerRef);
+                        listenerRef = null;
                         const rxBytes = [];
                         for (let i = 0; i < Math.min(event.data.byteLength, 8); i++) {
                             rxBytes.push(event.data.getUint8(i).toString(16).padStart(2, '0'));
                         }
-                        console.log(`HID RX: [${rxBytes.join(' ')}...]`);
+                        log.hid(`RX: [${rxBytes.join(' ')}...]`);
                         // Check for id_unhandled (0xFF) response
                         if (event.data.byteLength > 0 && event.data.getUint8(0) === 0xFF) {
-                            console.warn(`HID: Command 0x${commandId.toString(16).padStart(2, '0')} was REJECTED by firmware (0xFF)`);
+                            log.warnHid(`Command 0x${commandId.toString(16).padStart(2, '0')} REJECTED by firmware (0xFF)`);
                         }
                         resolve(event.data);
                     }
                 };
-                this.device.addEventListener('inputreport', listener);
+                this.device.addEventListener('inputreport', listenerRef);
             });
 
             await this.device.sendReport(reportId, packet);
             return await responsePromise;
 
         } catch (err) {
-            console.error("HID Send Error:", err);
+            // Clean up listener immediately on send error (don't wait for timeout)
+            if (listenerRef && this.device) {
+                this.device.removeEventListener('inputreport', listenerRef);
+            }
+            if (timeoutRef) clearTimeout(timeoutRef);
+            log.errorHid(`Send error: ${err}`);
             return null;
         }
     }
@@ -342,8 +357,8 @@ export class HIDService {
         speed: number;
         hue: number;
         saturation: number;
-    }, log?: (msg: string) => void): Promise<boolean> {
-        const _log = log ?? ((msg: string) => console.log(`[save] ${msg}`));
+    }, logFn?: (msg: string) => void): Promise<boolean> {
+        const _log = logFn ?? ((msg: string) => log.rgb(msg));
 
         // Step 1: Re-send all current values to ensure RAM is in sync
         if (currentState) {
@@ -377,7 +392,6 @@ export class HIDService {
         }
 
         // Step 3: Optional verify — log mismatches but don't fail
-        // The save command succeeding (non-0xFF response) is the real indicator
         if (currentState) {
             const readBrightness = await this.getRGBBrightness();
             const readEffect = await this.getRGBEffect();
@@ -402,7 +416,7 @@ export class HIDService {
             const data = await this.sendCommand(RGB_REMOTE_CMD, [RGB_REMOTE_QUERY]);
             // If firmware echoes 0xFE back (not 0xFF), it supports the protocol
             if (data && data.byteLength > 0 && data.getUint8(0) === RGB_REMOTE_CMD) {
-                console.log('Per-key RGB firmware detected (rgb_remote)');
+                log.device('Per-key RGB firmware detected (rgb_remote)');
                 return true;
             }
         } catch {
@@ -477,7 +491,7 @@ export class HIDService {
     // --- Health Check ---
 
     async healthCheck(): Promise<HealthCheckResult> {
-        const log: string[] = [];
+        const healthLog: string[] = [];
         const result: HealthCheckResult = {
             ok: false,
             deviceOpen: false,
@@ -488,16 +502,16 @@ export class HIDService {
             rgbEffect: null,
             rgbWriteVerify: false,
             perKeySupport: this._hasPerKeySupport,
-            log,
+            log: healthLog,
         };
 
         // 1. Check device is open
         if (!this.device || !this.device.opened) {
-            log.push('FAIL: No device connected or device not open');
+            healthLog.push('FAIL: No device connected or device not open');
             return result;
         }
         result.deviceOpen = true;
-        log.push(`OK: Device open — ${this.device.productName} (PID 0x${this.device.productId.toString(16)})`);
+        healthLog.push(`OK: Device open — ${this.device.productName} (PID 0x${this.device.productId.toString(16)})`);
 
         // 2. Protocol version query
         try {
@@ -505,13 +519,13 @@ export class HIDService {
             result.protocolVersion = ver;
             if (ver > 0) {
                 result.protocolResponds = true;
-                log.push(`OK: VIA protocol version ${ver} (${ver >= 11 ? 'V3' : 'V2'})`);
+                healthLog.push(`OK: VIA protocol version ${ver} (${ver >= 11 ? 'V3' : 'V2'})`);
             } else {
-                log.push('FAIL: Protocol version query returned 0 — device not responding');
+                healthLog.push('FAIL: Protocol version query returned 0 — device not responding');
                 return result;
             }
         } catch (e) {
-            log.push(`FAIL: Protocol version query threw: ${e}`);
+            healthLog.push(`FAIL: Protocol version query threw: ${e}`);
             return result;
         }
 
@@ -524,18 +538,18 @@ export class HIDService {
 
             if (result.rgbBrightness !== null) {
                 result.rgbReadable = true;
-                log.push(`OK: RGB brightness = ${result.rgbBrightness}`);
+                healthLog.push(`OK: RGB brightness = ${result.rgbBrightness}`);
             } else {
-                log.push('WARN: RGB brightness read returned null');
+                healthLog.push('WARN: RGB brightness read returned null');
             }
             if (result.rgbEffect !== null) {
-                log.push(`OK: RGB effect = ${result.rgbEffect}`);
+                healthLog.push(`OK: RGB effect = ${result.rgbEffect}`);
             } else {
-                log.push('WARN: RGB effect read returned null');
+                healthLog.push('WARN: RGB effect read returned null');
             }
-            log.push(`INFO: Speed = ${speed ?? 'null'}, Color HSV = ${color ? `H=${color[0]} S=${color[1]}` : 'null'}`);
+            healthLog.push(`INFO: Speed = ${speed ?? 'null'}, Color HSV = ${color ? `H=${color[0]} S=${color[1]}` : 'null'}`);
         } catch (e) {
-            log.push(`FAIL: RGB read threw: ${e}`);
+            healthLog.push(`FAIL: RGB read threw: ${e}`);
         }
 
         // 4. RGB write + readback verify
@@ -547,12 +561,12 @@ export class HIDService {
                 const readback = await this.getRGBBrightness();
                 if (readback === original) {
                     result.rgbWriteVerify = true;
-                    log.push(`OK: Write/readback verify passed (brightness ${original} → ${readback})`);
+                    healthLog.push(`OK: Write/readback verify passed (brightness ${original} -> ${readback})`);
                 } else {
-                    log.push(`WARN: Write/readback mismatch (wrote ${original}, read ${readback})`);
+                    healthLog.push(`WARN: Write/readback mismatch (wrote ${original}, read ${readback})`);
                 }
             } catch (e) {
-                log.push(`FAIL: Write/readback threw: ${e}`);
+                healthLog.push(`FAIL: Write/readback threw: ${e}`);
             }
         }
 
@@ -562,24 +576,24 @@ export class HIDService {
                 ? await this.sendCommand(VIA_CUSTOM_SAVE, [CHANNEL_RGB_MATRIX])
                 : await this.sendCommand(VIA_CUSTOM_SAVE);
             if (!saveCmd) {
-                log.push('WARN: EEPROM save command timed out');
+                healthLog.push('WARN: EEPROM save command timed out');
             } else {
                 const byte0 = saveCmd.getUint8(0);
                 if (byte0 === 0xFF) {
-                    log.push('WARN: EEPROM save rejected by firmware (0xFF) — firmware may not support custom save');
+                    healthLog.push('WARN: EEPROM save rejected by firmware (0xFF)');
                 } else {
-                    log.push(`OK: EEPROM save command accepted (response 0x${byte0.toString(16).padStart(2, '0')})`);
+                    healthLog.push(`OK: EEPROM save command accepted (response 0x${byte0.toString(16).padStart(2, '0')})`);
                 }
             }
         } catch (e) {
-            log.push(`FAIL: EEPROM save threw: ${e}`);
+            healthLog.push(`FAIL: EEPROM save threw: ${e}`);
         }
 
         // 6. Per-key RGB check
-        log.push(`INFO: Per-key RGB firmware: ${this._hasPerKeySupport ? 'DETECTED' : 'not detected (stock firmware)'}`);
+        healthLog.push(`INFO: Per-key RGB firmware: ${this._hasPerKeySupport ? 'DETECTED' : 'not detected (stock firmware)'}`);
 
         result.ok = result.deviceOpen && result.protocolResponds && result.rgbReadable;
-        log.push(result.ok ? 'OVERALL: Connection healthy' : 'OVERALL: Issues detected — see above');
+        healthLog.push(result.ok ? 'OVERALL: Connection healthy' : 'OVERALL: Issues detected — see above');
 
         return result;
     }
@@ -611,7 +625,9 @@ export class HIDService {
             this.device.sendReport(0, data).catch(() => {});
         }
         if (this.device?.opened) {
-            this.device.close().catch(() => {});
+            this.device.close().catch((err) => {
+                log.warnDevice(`Device close error: ${err}`);
+            });
         }
         this.device = null;
         this.protocolVersion = 0;
@@ -620,6 +636,7 @@ export class HIDService {
     }
 
     disconnect() {
+        log.device('Disconnecting device');
         this.cleanupDevice();
         this.isConnected = false;
         this.notifyListeners();

@@ -54,38 +54,6 @@ class StorageService {
         localStorage.removeItem(this.deviceKey(productId));
     }
 
-    // --- Diagnostic Log ---
-
-    private readonly LOG_KEY = `${STORAGE_PREFIX}:diag-log`;
-    private readonly LOG_MAX = 200;
-
-    appendDiagLog(entries: string[]): void {
-        const existing = this.loadDiagLog();
-        const combined = [...existing, ...entries].slice(-this.LOG_MAX);
-        try {
-            localStorage.setItem(this.LOG_KEY, JSON.stringify(combined));
-        } catch (e) {
-            console.warn('localStorage diag log save failed:', e);
-        }
-    }
-
-    loadDiagLog(): string[] {
-        try {
-            const raw = localStorage.getItem(this.LOG_KEY);
-            return raw ? JSON.parse(raw) : [];
-        } catch {
-            return [];
-        }
-    }
-
-    clearDiagLog(): void {
-        localStorage.removeItem(this.LOG_KEY);
-    }
-
-    exportDiagLog(): string {
-        return this.loadDiagLog().join('\n');
-    }
-
     // --- Config Snapshots ---
 
     private readonly SNAPSHOT_MAX = 20;

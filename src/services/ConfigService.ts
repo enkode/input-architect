@@ -1,4 +1,5 @@
 import { hid } from './HIDService';
+import { log } from './Logger';
 import type { VIAKeyboardDefinition } from '../types/via';
 
 export interface KeyboardConfig {
@@ -36,7 +37,7 @@ export class ConfigService {
                 const code = await hid.getKeycode(layer, row, col);
                 keymap.push(code ?? 0);
             } catch (e) {
-                console.error(`Failed to read key index ${i} at [${row},${col}]:`, e);
+                log.errorConfig(`Failed to read key index ${i} at [${row},${col}]: ${e}`);
                 keymap.push(0);
             }
         }
@@ -53,6 +54,8 @@ export class ConfigService {
 
         const productId = hid.getConnectedProductId();
         if (productId === null) return null;
+
+        log.config(`Starting backup for PID 0x${productId.toString(16)}`);
 
         const config: KeyboardConfig = {
             version: 2,
@@ -97,6 +100,7 @@ export class ConfigService {
             config.perKeyColors = { ...perKeyColors };
         }
 
+        log.config('Backup complete');
         return config;
     }
 
@@ -106,9 +110,13 @@ export class ConfigService {
     ): Promise<{ success: boolean; perKeyColors?: Record<number, string> }> {
         if (!hid.isDeviceConnected()) return { success: false };
         if (config.productId !== hid.getConnectedProductId()) {
-            const confirm = window.confirm("Config Product ID mismatch. Restore anyway?");
-            if (!confirm) return { success: false };
+            log.warnConfig(`Product ID mismatch: config=0x${config.productId.toString(16)}, device=0x${(hid.getConnectedProductId() ?? 0).toString(16)}`);
+            if (!window.confirm("Config Product ID mismatch. Restore anyway?")) {
+                return { success: false };
+            }
         }
+
+        log.config('Starting config restore...');
 
         // Restore keycodes layer by layer
         for (const layerStr in config.layers) {
@@ -135,7 +143,7 @@ export class ConfigService {
             await hid.saveRGBSettings(config.rgbSettings);
         }
 
-        alert("Configuration Restored!");
+        log.config('Config restore complete');
         return {
             success: true,
             perKeyColors: config.perKeyColors,

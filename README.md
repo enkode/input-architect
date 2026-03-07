@@ -80,7 +80,7 @@ Open **http://localhost:5173** in Chrome 89+ or Edge 89+ (WebHID required).
 - **Live readback** — see what's programmed on each key in real time
 
 ### RGB Lighting
-- **28+ built-in effects** — Solid Color, Breathing, Rainbow, Heatmap, Digital Rain, and more
+- **Built-in effects** — Off, Solid Color, and Breathing (the effects reliably supported by Framework firmware)
 - **Per-key RGB control** — set individual key colors with the [nucleardog firmware](#custom-firmware)
 - **Contextual per-key mode** — automatically activates when you select keys, returns to global mode when you deselect
 - **Shift+click range selection** — click a key, then Shift+click another on the same row to select the entire range; shows a hover preview while holding Shift
@@ -105,9 +105,14 @@ Open **http://localhost:5173** in Chrome 89+ or Edge 89+ (WebHID required).
 - **Auto-reconnect** — automatically reconnects to your device after sleep/wake cycles
 - **Firmware detection** — the Firmware page shows your currently installed firmware type with guidance on available options
 
-### Diagnostics
+### Diagnostics & Logging
 - **LED diagnostics** — test LEDs with a white/red/green/blue flash sequence, then report whether all, some, or none lit up; auto-troubleshooting suggests quick fixes
 - **Health check** — tests HID connection, protocol version, RGB read/write, EEPROM save, and per-key support in one pass
+- **Centralized logging** — all HID commands, RGB operations, config changes, and device events are logged with timestamps and categories; viewable in the in-app diagnostics panel or by tailing the Tauri log file from a terminal
+
+### Help & Guides
+- **In-app documentation** — categorized help articles covering Getting Started, Key Mapping, Lighting, Firmware, and Troubleshooting
+- **Accordion navigation** — expand categories and articles for quick reference without leaving the app
 
 ### Firmware Management
 - **Guided 5-step flash workflow** — Select, Download, Bootloader, Flash, Reconnect
@@ -288,17 +293,16 @@ src/
 │   │   └── Key.tsx             # Individual key (selection, animation, dim glow)
 │   │
 │   ├── Inspector/              # Right panel — configuration
-│   │   ├── PropertyPanel.tsx   # Mode router (mapping/lighting/macros)
+│   │   ├── PropertyPanel.tsx   # Mode router (mapping/lighting/settings)
 │   │   ├── KeymapFlow.tsx      # Keycode selector & apply flow
 │   │   ├── ColorPicker.tsx     # RGB/HSV picker, per-key & global controls
 │   │   ├── ConfigHistory.tsx   # Snapshot list, restore, export
-│   │   ├── LEDMatrixControls.tsx  # Serial LED matrix (expansion cards)
-│   │   └── RapidTriggerControl.tsx # Analog actuation (stub)
+│   │   └── RapidTriggerControl.tsx # Analog actuation (coming soon)
 │   │
 │   ├── Sidebar/                # Left panel — navigation
-│   │   ├── NavigationMenu.tsx  # Mode tabs (Mapping/Lighting/Firmware/...)
+│   │   ├── NavigationMenu.tsx  # Mode tabs (Mapping/Lighting/Firmware/Help)
 │   │   ├── LayerSelector.tsx   # Layer picker (0–5)
-│   │   └── ModuleList.tsx      # Device module selector & multi-device switcher
+│   │   └── HelpPanel.tsx       # In-app help & guides
 │   │
 │   └── Firmware/               # Firmware management
 │       ├── FirmwareStage.tsx   # 5-step guided flash workflow
@@ -306,9 +310,9 @@ src/
 │
 ├── services/
 │   ├── HIDService.ts           # WebHID — VIA protocol, per-key RGB
-│   ├── SerialService.ts        # WebSerial — LED matrix modules
 │   ├── ConfigService.ts        # High-level keymap read/write
-│   └── StorageService.ts       # Config history, snapshots, localStorage persistence
+│   ├── StorageService.ts       # Config history, snapshots, localStorage persistence
+│   └── Logger.ts               # Centralized logging (Tauri log file + in-app buffer)
 │
 ├── context/
 │   └── DeviceContext.tsx        # React context — device state, auto-reconnect
@@ -325,6 +329,7 @@ src/
 └── utils/
     ├── keycodes.ts             # QMK keycode map & labels
     ├── keyboardLayout.ts       # Key position utilities & row detection
+    ├── color.ts                # HSV/RGB color conversion utilities
     ├── uf2.ts                  # UF2 file format validator
     └── build-script.ts         # Firmware build script generator
 ```
@@ -339,8 +344,6 @@ src/
 - `0x02` — Disable per-key mode
 - `0x10` — Set LED colors (batch, up to 25 LEDs per packet)
 
-**WebSerial** — Used for Framework LED matrix expansion cards (separate from keyboard).
-
 ### Tech Stack
 
 | | |
@@ -351,7 +354,8 @@ src/
 | **Styling** | Tailwind CSS v4 |
 | **Animations** | Framer Motion |
 | **Icons** | Lucide React |
-| **Hardware** | WebHID API, WebSerial API |
+| **Logging** | Tauri Log Plugin (file-based, tailable) |
+| **Hardware** | WebHID API |
 
 ---
 

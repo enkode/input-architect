@@ -1,52 +1,13 @@
 import { useState, useRef, useEffect } from 'react';
 import { hid } from '../../services/HIDService';
 import { storageService } from '../../services/StorageService';
+import { log } from '../../services/Logger';
 import { useDevice } from '../../context/DeviceContext';
 import { FRAMEWORK_RGB_EFFECTS } from '../../data/definitions/framework16';
+import { rgbToHsv, hsvToRgb } from '../../utils/color';
 import { Save, ChevronDown, CheckCircle2, RefreshCw, Terminal, Zap, RotateCcw, Download, Trash2 } from 'lucide-react';
 import { clsx } from 'clsx';
 import type { VIAKeyboardDefinition } from '../../types/via';
-
-// RGB to HSV helper (VIA uses 0-255 range for H and S)
-function rgbToHsv(r: number, g: number, b: number): [number, number, number] {
-    r /= 255; g /= 255; b /= 255;
-    const max = Math.max(r, g, b);
-    const min = Math.min(r, g, b);
-    const d = max - min;
-    let h = 0;
-    const s = max === 0 ? 0 : d / max;
-    const v = max;
-
-    if (max !== min) {
-        switch (max) {
-            case r: h = (g - b) / d + (g < b ? 6 : 0); break;
-            case g: h = (b - r) / d + 2; break;
-            case b: h = (r - g) / d + 4; break;
-        }
-        h /= 6;
-    }
-    return [Math.round(h * 255), Math.round(s * 255), Math.round(v * 255)];
-}
-
-// HSV to RGB helper (H and S in 0-255 range)
-function hsvToRgb(h: number, s: number, v: number): [number, number, number] {
-    h = h / 255; s = s / 255; v = v / 255;
-    let r = 0, g = 0, b = 0;
-    const i = Math.floor(h * 6);
-    const f = h * 6 - i;
-    const p = v * (1 - s);
-    const q = v * (1 - f * s);
-    const t = v * (1 - (1 - f) * s);
-    switch (i % 6) {
-        case 0: r = v; g = t; b = p; break;
-        case 1: r = q; g = v; b = p; break;
-        case 2: r = p; g = v; b = t; break;
-        case 3: r = p; g = q; b = v; break;
-        case 4: r = t; g = p; b = v; break;
-        case 5: r = v; g = p; b = q; break;
-    }
-    return [Math.round(r * 255), Math.round(g * 255), Math.round(b * 255)];
-}
 
 interface ColorPickerProps {
     definition?: VIAKeyboardDefinition;
@@ -68,7 +29,7 @@ export function ColorPicker({ definition, selectedKeyIndices = [], onKeyColorCha
     const [perKeyActive, setPerKeyActive] = useState(false);
     const [saveState, setSaveState] = useState<'idle' | 'saving' | 'saved' | 'error'>('idle');
     const [hasUnsavedChanges, setHasUnsavedChanges] = useState(false);
-    const [diagLog, setDiagLog] = useState<string[]>([]);
+    const [logEntries, setLogEntries] = useState<string[]>([]);
     const [showDiag, setShowDiag] = useState(false);
     const [testingLeds, setTestingLeds] = useState(false);
     const [testPhase, setTestPhase] = useState<null | 'asking' | 'diagnosing' | 'troubleshoot'>(null);
@@ -88,7 +49,7 @@ export function ColorPicker({ definition, selectedKeyIndices = [], onKeyColorCha
         if (!hasPerKeyRGB || !isPerKeyMode || perKeyActive) return;
         hid.enablePerKeyMode().then(ok => {
             if (ok) setPerKeyActive(true);
-        }).catch(err => console.error('Per-key enable error:', err));
+        }).catch(err => log.errorRgb(`Per-key enable error: ${err}`));
     }, [isPerKeyMode, hasPerKeyRGB, perKeyActive]);
 
     // Sync color picker to selected key's existing color
@@ -109,29 +70,22 @@ export function ColorPicker({ definition, selectedKeyIndices = [], onKeyColorCha
         onGlobalColorChange(`rgb(${color.r},${color.g},${color.b})`);
     }, [color, onGlobalColorChange]);
 
-    const log = (msg: string) => {
-        const ts = new Date().toLocaleTimeString('en-US', { hour12: false, hour: '2-digit', minute: '2-digit', second: '2-digit' });
-        const entry = `[${ts}] ${msg}`;
-        console.log(entry);
-        setDiagLog(prev => [...prev.slice(-49), entry]);
-        storageService.appendDiagLog([entry]);
-    };
 
     const readDeviceState = async () => {
         if (!hid.isDeviceConnected()) {
-            log('ERROR: No device connected');
+            log.rgb('ERROR: No device connected');
             return;
         }
-        log('Reading lighting state from device...');
+        log.rgb('Reading lighting state from device...');
         try {
             const b = await hid.getRGBBrightness();
-            log(`  Brightness: ${b ?? 'null (no response)'}`);
+            log.rgb(`  Brightness: ${b ?? 'null (no response)'}`);
             const e = await hid.getRGBEffect();
-            log(`  Effect: ${e ?? 'null (no response)'}`);
+            log.rgb(`  Effect: ${e ?? 'null (no response)'}`);
             const s = await hid.getRGBEffectSpeed();
-            log(`  Speed: ${s ?? 'null (no response)'}`);
+            log.rgb(`  Speed: ${s ?? 'null (no response)'}`);
             const c = await hid.getRGBColor();
-            log(`  Color (HSV): ${c ? `H=${c[0]}, S=${c[1]}` : 'null (no response)'}`);
+            log.rgb(`  Color (HSV): ${c ? `H=${c[0]}, S=${c[1]}` : 'null (no response)'}`);
 
             if (b !== null) setBrightness(b);
             if (e !== null) setEffectId(e);
@@ -139,29 +93,26 @@ export function ColorPicker({ definition, selectedKeyIndices = [], onKeyColorCha
             if (c !== null) {
                 const [r, g, b2] = hsvToRgb(c[0], c[1], 255);
                 setColor({ r, g, b: b2 });
-                log(`  Color (RGB): R=${r}, G=${g}, B=${b2}`);
+                log.rgb(`  Color (RGB): R=${r}, G=${g}, B=${b2}`);
             }
 
             if (b === null && e === null && s === null && c === null) {
-                log('WARNING: All reads returned null — device may not be responding to VIA commands');
+                log.rgb('WARNING: All reads returned null — device may not be responding to VIA commands');
             } else {
-                log('Read complete');
+                log.rgb('Read complete');
             }
         } catch (err) {
-            log(`ERROR: ${err}`);
+            log.rgb(`ERROR: ${err}`);
         }
     };
 
-    // Load stored diagnostic log on mount
+    // Subscribe to centralized Logger for diagnostic display
     useEffect(() => {
-        const stored = storageService.loadDiagLog();
-        if (stored.length > 0) {
-            setDiagLog(stored.slice(-50));
-        }
-        const ts = new Date().toLocaleTimeString('en-US', { hour12: false, hour: '2-digit', minute: '2-digit', second: '2-digit' });
-        const separator = `[${ts}] ─── New Session ───`;
-        setDiagLog(prev => [...prev, separator]);
-        storageService.appendDiagLog([separator]);
+        setLogEntries(log.getBuffer().slice(-50));
+        const unsubscribe = log.onLog((entry) => {
+            setLogEntries(prev => [...prev.slice(-49), entry]);
+        });
+        return unsubscribe;
     }, []);
 
     // Read device state only after auto-restore has completed
@@ -198,7 +149,7 @@ export function ColorPicker({ definition, selectedKeyIndices = [], onKeyColorCha
                 await hid.setRGBColor(h, s);
             }
         } catch (err) {
-            console.error("Color command failed:", err);
+            log.errorRgb(`Color command failed: ${err}`);
         } finally {
             isSending.current = false;
             if (pendingColor.current) {
@@ -224,45 +175,45 @@ export function ColorPicker({ definition, selectedKeyIndices = [], onKeyColorCha
     const handleBrightnessChange = (val: number) => {
         setBrightness(val);
         setHasUnsavedChanges(true);
-        hid.setRGBBrightness(val).catch(err => log(`Brightness set failed: ${err}`));
+        hid.setRGBBrightness(val).catch(err => log.rgb(`Brightness set failed: ${err}`));
     };
 
     const handleEffectChange = (id: number) => {
         setEffectId(id);
         setEffectDropdownOpen(false);
         setHasUnsavedChanges(true);
-        log(`Setting effect to ${id}`);
-        hid.setRGBEffect(id).catch(err => log(`Effect set failed: ${err}`));
+        log.rgb(`Setting effect to ${id}`);
+        hid.setRGBEffect(id).catch(err => log.rgb(`Effect set failed: ${err}`));
     };
 
     const handleSpeedChange = (val: number) => {
         setSpeed(val);
         setHasUnsavedChanges(true);
-        hid.setRGBEffectSpeed(val).catch(err => log(`Speed set failed: ${err}`));
+        hid.setRGBEffectSpeed(val).catch(err => log.rgb(`Speed set failed: ${err}`));
     };
 
     const handleSave = async () => {
         if (saveState === 'saving') return;
         setSaveState('saving');
-        log(`Saving: brightness=${brightness}, effect=${effectId}, speed=${speed}, color=RGB(${color.r},${color.g},${color.b})`);
+        log.rgb(`Saving: brightness=${brightness}, effect=${effectId}, speed=${speed}, color=RGB(${color.r},${color.g},${color.b})`);
         try {
             const [h, s] = rgbToHsv(color.r, color.g, color.b);
-            log(`  HSV: H=${h}, S=${s}`);
+            log.rgb(`  HSV: H=${h}, S=${s}`);
             const ok = await hid.saveRGBSettings({
                 brightness,
                 effectId,
                 speed,
                 hue: h,
                 saturation: s,
-            }, log);
+            }, (msg: string) => log.rgb(msg));
             if (ok) {
-                log('Save SUCCESS');
+                log.rgb('Save SUCCESS');
                 // Also save to localStorage for auto-restore on reconnect
                 if (connectedProductId !== null) {
                     storageService.saveDeviceState(connectedProductId, {
                         rgbSettings: { brightness, effectId, speed, hue: h, saturation: s },
                     });
-                    log('Settings also saved to localStorage');
+                    log.rgb('Settings also saved to localStorage');
                     // Auto-snapshot for config history
                     storageService.saveSnapshot(connectedProductId, {
                         label: 'Saved to device',
@@ -274,12 +225,12 @@ export function ColorPicker({ definition, selectedKeyIndices = [], onKeyColorCha
                 setHasUnsavedChanges(false);
                 setTimeout(() => setSaveState('idle'), 2000);
             } else {
-                log('Save FAILED — see details above');
+                log.rgb('Save FAILED — see details above');
                 setSaveState('error');
                 setTimeout(() => setSaveState('idle'), 3000);
             }
         } catch (err) {
-            log(`Save ERROR: ${err}`);
+            log.rgb(`Save ERROR: ${err}`);
             setSaveState('error');
             setTimeout(() => setSaveState('idle'), 3000);
         }
@@ -290,87 +241,87 @@ export function ColorPicker({ definition, selectedKeyIndices = [], onKeyColorCha
         setTestingLeds(true);
         setTestPhase(null);
         setShowDiag(true);
-        log('═══ LED TEST START ═══');
+        log.rgb('═══ LED TEST START ═══');
 
         // Save original VIA state
         const origBrightness = await hid.getRGBBrightness();
         const origEffect = await hid.getRGBEffect();
         const origSpeed = await hid.getRGBEffectSpeed();
         const origColor = await hid.getRGBColor();
-        log(`Current state: brightness=${origBrightness}, effect=${origEffect}, speed=${origSpeed}, color=${origColor ? `H=${origColor[0]} S=${origColor[1]}` : 'null'}`);
+        log.rgb(`Current state: brightness=${origBrightness}, effect=${origEffect}, speed=${origSpeed}, color=${origColor ? `H=${origColor[0]} S=${origColor[1]}` : 'null'}`);
 
         try {
             if (hasPerKeyRGB && definition) {
                 // Use per-key RGB (proven to work on this hardware)
-                log('Using per-key RGB mode for test...');
+                log.rgb('Using per-key RGB mode for test...');
                 const enabled = await hid.enablePerKeyMode();
                 if (!enabled) {
-                    log('ERROR: Failed to enable per-key mode');
+                    log.rgb('ERROR: Failed to enable per-key mode');
                     return;
                 }
 
                 // Flash white
-                log('Flashing WHITE...');
+                log.rgb('Flashing WHITE...');
                 await hid.setAllKeysColor(255, 255, 255, definition.ledCount);
                 await new Promise(res => setTimeout(res, 800));
 
                 // Flash red
-                log('Flashing RED...');
+                log.rgb('Flashing RED...');
                 await hid.setAllKeysColor(255, 0, 0, definition.ledCount);
                 await new Promise(res => setTimeout(res, 800));
 
                 // Flash green
-                log('Flashing GREEN...');
+                log.rgb('Flashing GREEN...');
                 await hid.setAllKeysColor(0, 255, 0, definition.ledCount);
                 await new Promise(res => setTimeout(res, 800));
 
                 // Flash blue
-                log('Flashing BLUE...');
+                log.rgb('Flashing BLUE...');
                 await hid.setAllKeysColor(0, 0, 255, definition.ledCount);
                 await new Promise(res => setTimeout(res, 800));
 
                 // Back to white and hold
-                log('Holding WHITE — look at your keyboard now...');
+                log.rgb('Holding WHITE — look at your keyboard now...');
                 await hid.setAllKeysColor(255, 255, 255, definition.ledCount);
                 await new Promise(res => setTimeout(res, 1000));
 
                 // Disable per-key mode to restore normal animations
                 await hid.disablePerKeyMode();
-                log('Per-key mode disabled, normal animations restored');
+                log.rgb('Per-key mode disabled, normal animations restored');
             } else {
                 // Fallback: VIA global commands
-                log('Per-key RGB not available, using VIA global commands...');
+                log.rgb('Per-key RGB not available, using VIA global commands...');
 
-                log('Setting brightness to 255...');
+                log.rgb('Setting brightness to 255...');
                 await hid.setRGBBrightness(255);
                 const readB = await hid.getRGBBrightness();
-                log(`  Readback: brightness=${readB} ${readB === 255 ? '(OK)' : readB === null ? '(NO RESPONSE)' : `(MISMATCH — sent 255, got ${readB})`}`);
+                log.rgb(`  Readback: brightness=${readB} ${readB === 255 ? '(OK)' : readB === null ? '(NO RESPONSE)' : `(MISMATCH — sent 255, got ${readB})`}`);
 
-                log('Setting effect to 1 (Solid Color)...');
+                log.rgb('Setting effect to 1 (Solid Color)...');
                 await hid.setRGBEffect(1);
                 const readE = await hid.getRGBEffect();
-                log(`  Readback: effect=${readE} ${readE === 1 ? '(OK)' : readE === null ? '(NO RESPONSE)' : `(MISMATCH — sent 1, got ${readE})`}`);
+                log.rgb(`  Readback: effect=${readE} ${readE === 1 ? '(OK)' : readE === null ? '(NO RESPONSE)' : `(MISMATCH — sent 1, got ${readE})`}`);
 
-                log('Setting color to white (H=0, S=0)...');
+                log.rgb('Setting color to white (H=0, S=0)...');
                 await hid.setRGBColor(0, 0);
                 const readC = await hid.getRGBColor();
-                log(`  Readback: color=${readC ? `H=${readC[0]} S=${readC[1]}` : 'null'} ${readC && readC[0] === 0 && readC[1] === 0 ? '(OK)' : readC === null ? '(NO RESPONSE)' : '(MISMATCH)'}`);
+                log.rgb(`  Readback: color=${readC ? `H=${readC[0]} S=${readC[1]}` : 'null'} ${readC && readC[0] === 0 && readC[1] === 0 ? '(OK)' : readC === null ? '(NO RESPONSE)' : '(MISMATCH)'}`);
 
                 if (readB === null && readE === null && readC === null) {
-                    log('ERROR: Device not responding — HID connection may be stale');
+                    log.rgb('ERROR: Device not responding — HID connection may be stale');
                 } else {
-                    log('Commands sent — LEDs should now be bright white');
+                    log.rgb('Commands sent — LEDs should now be bright white');
                 }
 
                 await new Promise(res => setTimeout(res, 3000));
             }
         } catch (err) {
-            log(`LED Test ERROR: ${err}`);
+            log.rgb(`LED Test ERROR: ${err}`);
         } finally {
             setTestingLeds(false);
             setDiagResult({ brightness: origBrightness, effect: origEffect, speed: origSpeed, color: origColor });
             setTestPhase('asking');
-            log('═══ Waiting for user confirmation ═══');
+            log.rgb('═══ Waiting for user confirmation ═══');
         }
     };
 
@@ -378,7 +329,7 @@ export function ColorPicker({ definition, selectedKeyIndices = [], onKeyColorCha
 
     const handleTestAnswer = async (result: 'all' | 'some' | 'none') => {
         if (result === 'all') {
-            log('User confirmed all LEDs are working — restoring previous settings');
+            log.rgb('User confirmed all LEDs are working — restoring previous settings');
             if (diagResult) {
                 if (diagResult.brightness !== null) { await hid.setRGBBrightness(diagResult.brightness); setBrightness(diagResult.brightness); }
                 if (diagResult.effect !== null) { await hid.setRGBEffect(diagResult.effect); setEffectId(diagResult.effect); }
@@ -388,7 +339,7 @@ export function ColorPicker({ definition, selectedKeyIndices = [], onKeyColorCha
                     const [r2, g2, b2] = hsvToRgb(diagResult.color[0], diagResult.color[1], 255);
                     setColor({ r: r2, g: g2, b: b2 });
                 }
-                log('Previous settings restored');
+                log.rgb('Previous settings restored');
             }
             setPartialFlash(false);
             setTestPhase(null);
@@ -397,7 +348,7 @@ export function ColorPicker({ definition, selectedKeyIndices = [], onKeyColorCha
         // User saw partial or no lights — read current state for troubleshooting
         setPartialFlash(result === 'some');
         setTestPhase('diagnosing');
-        log(`User reported ${result === 'some' ? 'partial' : 'no'} lights — reading device state...`);
+        log.rgb(`User reported ${result === 'some' ? 'partial' : 'no'} lights — reading device state...`);
         try {
             const b = await hid.getRGBBrightness();
             const e = await hid.getRGBEffect();
@@ -412,14 +363,14 @@ export function ColorPicker({ definition, selectedKeyIndices = [], onKeyColorCha
             if (b === null) issues.push('Brightness read returned null — device not responding');
             if (e === null) issues.push('Effect read returned null — device not responding');
             if (issues.length > 0) {
-                log(`Issues: ${issues.join('; ')}`);
+                log.rgb(`Issues: ${issues.join('; ')}`);
             } else {
-                log(`Settings read OK but no light: brightness=${b}, effect=${e}`);
-                log('RGB matrix may be disabled via keyboard shortcut (Fn+Space / Fn+F10)');
+                log.rgb(`Settings read OK but no light: brightness=${b}, effect=${e}`);
+                log.rgb('RGB matrix may be disabled via keyboard shortcut (Fn+Space / Fn+F10)');
             }
             setTestPhase('troubleshoot');
         } catch (err) {
-            log(`Diagnostics ERROR: ${err}`);
+            log.rgb(`Diagnostics ERROR: ${err}`);
             setTestPhase('troubleshoot');
         }
     };
@@ -429,30 +380,30 @@ export function ColorPicker({ definition, selectedKeyIndices = [], onKeyColorCha
         setShowDiag(true);
         try {
             if (fix === 'brightness') {
-                log('Fix: Setting brightness to maximum...');
+                log.rgb('Fix: Setting brightness to maximum...');
                 await hid.setRGBBrightness(255);
                 const readback = await hid.getRGBBrightness();
-                log(`  Readback: ${readback}`);
+                log.rgb(`  Readback: ${readback}`);
                 setBrightness(255);
                 const [h, s] = rgbToHsv(color.r, color.g, color.b);
-                await hid.saveRGBSettings({ brightness: 255, effectId, speed, hue: h, saturation: s }, log);
-                log('Brightness fix applied and saved');
+                await hid.saveRGBSettings({ brightness: 255, effectId, speed, hue: h, saturation: s }, (msg: string) => log.rgb(msg));
+                log.rgb('Brightness fix applied and saved');
             } else if (fix === 'effect') {
-                log('Fix: Enabling solid color effect + max brightness...');
+                log.rgb('Fix: Enabling solid color effect + max brightness...');
                 await hid.setRGBEffect(1);
                 await hid.setRGBBrightness(255);
                 setEffectId(1);
                 setBrightness(255);
                 const [h, s] = rgbToHsv(color.r, color.g, color.b);
-                await hid.saveRGBSettings({ brightness: 255, effectId: 1, speed, hue: h, saturation: s }, log);
-                log('Effect fix applied and saved');
+                await hid.saveRGBSettings({ brightness: 255, effectId: 1, speed, hue: h, saturation: s }, (msg: string) => log.rgb(msg));
+                log.rgb('Effect fix applied and saved');
             } else {
-                log('Fix: Full lighting reset...');
+                log.rgb('Fix: Full lighting reset...');
                 await handleResetLighting();
             }
             setHasUnsavedChanges(false);
         } catch (err) {
-            log(`Fix ERROR: ${err}`);
+            log.rgb(`Fix ERROR: ${err}`);
         } finally {
             setFixingStep(null);
         }
@@ -462,7 +413,7 @@ export function ColorPicker({ definition, selectedKeyIndices = [], onKeyColorCha
         if (resettingLeds) return;
         setResettingLeds(true);
         setShowDiag(true);
-        log('═══ RESETTING LIGHTING ═══');
+        log.rgb('═══ RESETTING LIGHTING ═══');
 
         // Snapshot current state before reset so user can undo
         if (connectedProductId !== null) {
@@ -484,34 +435,34 @@ export function ColorPicker({ definition, selectedKeyIndices = [], onKeyColorCha
                 saturation: 255,
             };
 
-            log('Setting brightness=255...');
+            log.rgb('Setting brightness=255...');
             await hid.setRGBBrightness(defaults.brightness);
             const rb = await hid.getRGBBrightness();
-            log(`  Readback: ${rb} ${rb === 255 ? '(OK)' : rb === null ? '(NO RESPONSE)' : `(got ${rb})`}`);
+            log.rgb(`  Readback: ${rb} ${rb === 255 ? '(OK)' : rb === null ? '(NO RESPONSE)' : `(got ${rb})`}`);
 
-            log('Setting effect=1 (Solid Color)...');
+            log.rgb('Setting effect=1 (Solid Color)...');
             await hid.setRGBEffect(defaults.effectId);
             const re = await hid.getRGBEffect();
-            log(`  Readback: ${re} ${re === 1 ? '(OK)' : re === null ? '(NO RESPONSE)' : `(got ${re})`}`);
+            log.rgb(`  Readback: ${re} ${re === 1 ? '(OK)' : re === null ? '(NO RESPONSE)' : `(got ${re})`}`);
 
-            log('Setting speed=128...');
+            log.rgb('Setting speed=128...');
             await hid.setRGBEffectSpeed(defaults.speed);
 
-            log('Setting color=red (H=0, S=255)...');
+            log.rgb('Setting color=red (H=0, S=255)...');
             await hid.setRGBColor(defaults.hue, defaults.saturation);
 
             // Save to EEPROM so it persists
-            const ok = await hid.saveRGBSettings(defaults, log);
+            const ok = await hid.saveRGBSettings(defaults, (msg: string) => log.rgb(msg));
             if (ok) {
-                log('Reset complete — defaults saved to EEPROM');
+                log.rgb('Reset complete — defaults saved to EEPROM');
             } else {
-                log('Reset applied to RAM but EEPROM save may have failed');
+                log.rgb('Reset applied to RAM but EEPROM save may have failed');
             }
 
             // Also save to localStorage for auto-restore on reconnect
             if (connectedProductId !== null) {
                 storageService.saveDeviceState(connectedProductId, { rgbSettings: defaults });
-                log('Settings also saved to localStorage for auto-restore');
+                log.rgb('Settings also saved to localStorage for auto-restore');
             }
 
             // Update UI to match
@@ -522,14 +473,14 @@ export function ColorPicker({ definition, selectedKeyIndices = [], onKeyColorCha
             setColor({ r, g, b: b2 });
             setHasUnsavedChanges(false);
         } catch (err) {
-            log(`Reset ERROR: ${err}`);
+            log.rgb(`Reset ERROR: ${err}`);
         } finally {
             setResettingLeds(false);
         }
     };
 
     const handleExportLog = () => {
-        const text = storageService.exportDiagLog();
+        const text = log.export();
         const blob = new Blob([text], { type: 'text/plain' });
         const url = URL.createObjectURL(blob);
         const a = document.createElement('a');
@@ -540,8 +491,8 @@ export function ColorPicker({ definition, selectedKeyIndices = [], onKeyColorCha
     };
 
     const handleClearLog = () => {
-        storageService.clearDiagLog();
-        setDiagLog([]);
+        log.clear();
+        setLogEntries([]);
     };
 
     const currentEffect = FRAMEWORK_RGB_EFFECTS.find(e => e.id === effectId);
@@ -935,10 +886,10 @@ export function ColorPicker({ definition, selectedKeyIndices = [], onKeyColorCha
                     >
                         <Terminal size={12} />
                         <span>Diagnostics</span>
-                        {diagLog.length > 0 && <span className="text-[9px] text-text-muted/50">({diagLog.length})</span>}
+                        {logEntries.length > 0 && <span className="text-[9px] text-text-muted/50">({logEntries.length})</span>}
                         <ChevronDown size={12} className={clsx("ml-auto transition-transform", showDiag && "rotate-180")} />
                     </button>
-                    {showDiag && diagLog.length > 0 && (
+                    {showDiag && logEntries.length > 0 && (
                         <div className="flex items-center gap-1 pr-2">
                             <button
                                 onClick={handleExportLog}
@@ -959,10 +910,10 @@ export function ColorPicker({ definition, selectedKeyIndices = [], onKeyColorCha
                 </div>
                 {showDiag && (
                     <div className="border-t border-border px-3 py-2 max-h-40 overflow-auto font-mono text-[9px] leading-relaxed text-text-muted bg-black/20 space-y-0.5">
-                        {diagLog.length === 0 ? (
+                        {logEntries.length === 0 ? (
                             <div className="text-text-muted/50 italic">No log entries yet. Try clicking the refresh button.</div>
                         ) : (
-                            diagLog.map((entry, i) => (
+                            logEntries.map((entry, i) => (
                                 <div key={i} className={clsx(
                                     entry.includes('ERROR') || entry.includes('FAILED') ? 'text-red-400' :
                                     entry.includes('WARNING') ? 'text-yellow-400' :

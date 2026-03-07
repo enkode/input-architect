@@ -4,6 +4,7 @@ import { KeyboardStage } from './components/Stage/KeyboardStage';
 import { PropertyPanel } from './components/Inspector/PropertyPanel';
 import { FirmwarePanel } from './components/Firmware/FirmwarePanel';
 import { FirmwareStage } from './components/Firmware/FirmwareStage';
+import { HelpPanel } from './components/Sidebar/HelpPanel';
 import { LayerSelector } from './components/Sidebar/LayerSelector';
 import { NavigationMenu, type AppMode } from './components/Sidebar/NavigationMenu';
 import { FRAMEWORK_16_ANSI } from './data/definitions/framework16';
@@ -11,6 +12,7 @@ import { FRAMEWORK_MACROPAD } from './data/definitions/macropad';
 import { useDevice } from './context/DeviceContext';
 import { configService } from './services/ConfigService';
 import { storageService } from './services/StorageService';
+import { log } from './services/Logger';
 import { hid, type HealthCheckResult } from './services/HIDService';
 import { parseKeyPositions, getRowRangeIndices } from './utils/keyboardLayout';
 import type { VIAKeyboardDefinition } from './types/via';
@@ -53,6 +55,11 @@ function App() {
   const saveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const perKeyRestoredRef = useRef(false);
 
+  // Clean up save timer on unmount
+  useEffect(() => {
+    return () => { if (saveTimerRef.current) clearTimeout(saveTimerRef.current); };
+  }, []);
+
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
       if (e.key === 'Shift') setIsShiftHeld(true);
@@ -62,7 +69,7 @@ function App() {
       if (e.key === 'Shift') setIsShiftHeld(false);
       setPressedKeys(prev => prev.filter(k => k !== e.code));
     };
-    const handleBlur = () => setIsShiftHeld(false);
+    const handleBlur = () => { setIsShiftHeld(false); setPressedKeys([]); };
 
     window.addEventListener('keydown', handleKeyDown);
     window.addEventListener('keyup', handleKeyUp);
@@ -96,7 +103,7 @@ function App() {
         .then(keymap => {
           if (keymap) setDeviceKeymap(keymap);
         })
-        .catch(console.error);
+        .catch(err => log.errorConfig(`Keymap read failed: ${err}`));
     }
   };
 
@@ -153,12 +160,12 @@ function App() {
           // Restore global RGB settings from localStorage
           if (stored?.rgbSettings) {
             const { brightness, effectId, speed, hue, saturation } = stored.rgbSettings;
-            console.log(`Auto-restoring RGB settings: brightness=${brightness}, effect=${effectId}, speed=${speed}, H=${hue}, S=${saturation}`);
+            log.config(`Auto-restoring RGB settings: brightness=${brightness}, effect=${effectId}, speed=${speed}, H=${hue}, S=${saturation}`);
             await hid.setRGBBrightness(brightness);
             await hid.setRGBEffect(effectId);
             await hid.setRGBEffectSpeed(speed);
             await hid.setRGBColor(hue, saturation);
-            console.log('RGB settings restored from localStorage');
+            log.config('RGB settings restored from localStorage');
           }
 
           // Restore per-key colors
@@ -169,7 +176,7 @@ function App() {
             }
           }
         } catch (err) {
-          console.error('Failed to restore settings:', err);
+          log.errorConfig(`Failed to restore settings: ${err}`);
         } finally {
           markRestoreComplete();
         }
@@ -218,7 +225,8 @@ function App() {
       const result = await hid.healthCheck();
       setHealthResult(result);
     } catch (e) {
-      console.error('Health check error:', e);
+      log.errorDevice(`Health check error: ${e}`);
+      setHealthResult({ ok: false, deviceOpen: false, protocolResponds: false, protocolVersion: 0, rgbReadable: false, rgbBrightness: null, rgbEffect: null, rgbWriteVerify: false, perKeySupport: false, log: [`ERROR: ${e}`] });
     } finally {
       setHealthChecking(false);
     }
@@ -387,14 +395,15 @@ function App() {
         </div>
       }
       sidebarRight={
-        activeMode === 'firmware' ? (
+        activeMode === 'help' ? (
+          <HelpPanel />
+        ) : activeMode === 'firmware' ? (
           <FirmwarePanel />
         ) : activeDefinition ? (
           <PropertyPanel
             activeMode={activeMode}
             activeDefinition={activeDefinition}
             selectedModuleId={activeDefinition.name}
-            selectedModuleType={activeDefinition === FRAMEWORK_MACROPAD ? 'numpad' : 'keyboard'}
             selectedKeyIndices={selectedKeyIndices}
             selectedLayer={selectedLayer}
             onConfigRestore={refreshKeymap}

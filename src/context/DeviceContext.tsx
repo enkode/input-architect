@@ -1,6 +1,7 @@
 import { createContext, useContext, useEffect, useState, useCallback, type ReactNode } from 'react';
 import { hid } from '../services/HIDService';
 import { storageService } from '../services/StorageService';
+import { log } from '../services/Logger';
 
 interface PermittedDevice {
     productId: number;
@@ -87,7 +88,7 @@ export function DeviceProvider({ children }: { children: ReactNode }) {
             await new Promise(r => setTimeout(r, 500));
             if (!hid.isDeviceConnected()) return;
 
-            console.log('Page visible — re-applying saved RGB settings after wake');
+            log.device('Page visible — re-applying saved RGB settings after wake');
             const stored = storageService.loadDeviceState(pid);
             if (stored?.rgbSettings) {
                 const { brightness, effectId, speed, hue, saturation } = stored.rgbSettings;
@@ -96,9 +97,9 @@ export function DeviceProvider({ children }: { children: ReactNode }) {
                     await hid.setRGBEffect(effectId);
                     await hid.setRGBEffectSpeed(speed);
                     await hid.setRGBColor(hue, saturation);
-                    console.log('RGB settings re-applied after wake');
+                    log.device('RGB settings re-applied after wake');
                 } catch (err) {
-                    console.warn('Failed to re-apply RGB settings after wake:', err);
+                    log.warnDevice(`Failed to re-apply RGB settings after wake: ${err}`);
                 }
             }
         };

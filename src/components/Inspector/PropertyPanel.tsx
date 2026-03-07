@@ -2,7 +2,6 @@ import { useState } from 'react';
 import { ColorPicker } from './ColorPicker';
 import { KeymapFlow } from './KeymapFlow';
 import { RapidTriggerControl } from './RapidTriggerControl';
-import { LEDMatrixControls } from './LEDMatrixControls';
 import { ConfigHistory } from './ConfigHistory';
 import { Settings2, Download, Upload, CheckCircle2 } from 'lucide-react';
 import { configService } from '../../services/ConfigService';
@@ -13,7 +12,6 @@ interface PropertyPanelProps {
     activeMode: 'mapping' | 'lighting' | 'settings';
     activeDefinition?: VIAKeyboardDefinition;
     selectedModuleId: string | null;
-    selectedModuleType: 'keyboard' | 'numpad' | 'led-matrix' | null;
     selectedKeyIndices?: number[];
     selectedLayer?: number;
     onConfigRestore?: () => void;
@@ -24,7 +22,7 @@ interface PropertyPanelProps {
     onGlobalColorChange?: (color: string | null) => void;
 }
 
-export function PropertyPanel({ activeMode, activeDefinition, selectedModuleId, selectedModuleType, selectedKeyIndices = [], selectedLayer = 0, onConfigRestore, onKeymapChange, onKeyColorChange, keyColors, onPerKeyColorsRestore, onGlobalColorChange }: PropertyPanelProps) {
+export function PropertyPanel({ activeMode, activeDefinition, selectedModuleId, selectedKeyIndices = [], selectedLayer = 0, onConfigRestore, onKeymapChange, onKeyColorChange, keyColors, onPerKeyColorsRestore, onGlobalColorChange }: PropertyPanelProps) {
     const [backupState, setBackupState] = useState<'idle' | 'backing-up' | 'done' | 'error'>('idle');
     const [backupProgress, setBackupProgress] = useState(0);
 
@@ -33,19 +31,6 @@ export function PropertyPanel({ activeMode, activeDefinition, selectedModuleId, 
         return (
             <div className="p-4 h-full flex items-center justify-center text-text-muted text-xs">
                 Select a module to edit properties
-            </div>
-        );
-    }
-
-    // LED Matrix/Display Logic
-    if (selectedModuleType === 'led-matrix') {
-        return (
-            <div className="p-4 space-y-4 h-full">
-                <div className="flex items-center justify-between mb-2">
-                    <h2 className="text-xs font-bold text-primary uppercase tracking-widest border-b border-primary/30 pb-1">Properties</h2>
-                    <span className="text-[10px] font-mono text-text-muted">{selectedModuleId.toUpperCase()}</span>
-                </div>
-                <LEDMatrixControls />
             </div>
         );
     }
