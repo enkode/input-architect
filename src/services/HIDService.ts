@@ -435,6 +435,10 @@ export class HIDService {
                 batch.length,
                 ...batch
             ]);
+            // Small delay between packets to avoid overwhelming firmware
+            if (i + maxPerPacket < ledIndices.length) {
+                await new Promise(r => setTimeout(r, 2));
+            }
         }
         return true;
     }

@@ -82,20 +82,13 @@ export function ColorPicker({ definition, selectedKeyIndices = [], onKeyColorCha
     const hasSelectedKeys = selectedKeyIndices.length > 0;
     const isPerKeyMode = hasPerKeyRGB && hasSelectedKeys;
 
-    // Auto-enable/disable per-key firmware mode based on selection
+    // Auto-enable per-key firmware mode when keys are selected
+    // Do NOT auto-disable on deselect — per-key colors should persist on the keyboard
     useEffect(() => {
-        if (!hasPerKeyRGB) return;
-        let cancelled = false;
-        if (isPerKeyMode && !perKeyActive) {
-            hid.enablePerKeyMode().then(ok => {
-                if (!cancelled && ok) setPerKeyActive(true);
-            }).catch(err => console.error('Per-key enable error:', err));
-        } else if (!isPerKeyMode && perKeyActive) {
-            hid.disablePerKeyMode().then(() => {
-                if (!cancelled) setPerKeyActive(false);
-            }).catch(err => console.error('Per-key disable error:', err));
-        }
-        return () => { cancelled = true; };
+        if (!hasPerKeyRGB || !isPerKeyMode || perKeyActive) return;
+        hid.enablePerKeyMode().then(ok => {
+            if (ok) setPerKeyActive(true);
+        }).catch(err => console.error('Per-key enable error:', err));
     }, [isPerKeyMode, hasPerKeyRGB, perKeyActive]);
 
     // Sync color picker to selected key's existing color
@@ -381,10 +374,11 @@ export function ColorPicker({ definition, selectedKeyIndices = [], onKeyColorCha
         }
     };
 
-    const handleTestAnswer = async (sawLights: boolean) => {
-        if (sawLights) {
-            log('User confirmed LEDs are working — restoring previous settings');
-            // Restore original values
+    const [partialFlash, setPartialFlash] = useState(false);
+
+    const handleTestAnswer = async (result: 'all' | 'some' | 'none') => {
+        if (result === 'all') {
+            log('User confirmed all LEDs are working — restoring previous settings');
             if (diagResult) {
                 if (diagResult.brightness !== null) { await hid.setRGBBrightness(diagResult.brightness); setBrightness(diagResult.brightness); }
                 if (diagResult.effect !== null) { await hid.setRGBEffect(diagResult.effect); setEffectId(diagResult.effect); }
@@ -396,12 +390,14 @@ export function ColorPicker({ definition, selectedKeyIndices = [], onKeyColorCha
                 }
                 log('Previous settings restored');
             }
+            setPartialFlash(false);
             setTestPhase(null);
             return;
         }
-        // User didn't see lights — read current state for troubleshooting
+        // User saw partial or no lights — read current state for troubleshooting
+        setPartialFlash(result === 'some');
         setTestPhase('diagnosing');
-        log('User reported no lights — reading device state...');
+        log(`User reported ${result === 'some' ? 'partial' : 'no'} lights — reading device state...`);
         try {
             const b = await hid.getRGBBrightness();
             const e = await hid.getRGBEffect();
@@ -621,7 +617,13 @@ export function ColorPicker({ definition, selectedKeyIndices = [], onKeyColorCha
                                 value={color[c]}
                                 onChange={(e) => handleColorChange(c, parseInt(e.target.value))}
                             />
-                            <span className="text-text-muted w-8 text-right">{color[c]}</span>
+                            <input
+                                type="number"
+                                min={0} max={255}
+                                value={color[c]}
+                                onChange={(e) => handleColorChange(c, Math.min(255, Math.max(0, parseInt(e.target.value) || 0)))}
+                                className="w-10 text-right text-text-muted bg-transparent border-b border-transparent hover:border-text-muted focus:border-primary focus:text-text-primary outline-none text-xs font-mono [appearance:textfield] [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none"
+                            />
                         </div>
                     ))}
                 </div>
@@ -629,9 +631,17 @@ export function ColorPicker({ definition, selectedKeyIndices = [], onKeyColorCha
                 {/* Per-key Brightness */}
                 {isPerKeyMode && (
                     <div className="space-y-1">
-                        <label className="text-xs font-semibold text-text-muted flex justify-between">
+                        <label className="text-xs font-semibold text-text-muted flex justify-between items-center">
                             <span>Brightness</span>
-                            <span>{perKeyBrightness === 0 ? '0' : Math.max(1, Math.round((perKeyBrightness / 255) * 100))}%</span>
+                            <span className="flex items-center gap-0.5">
+                                <input
+                                    type="number"
+                                    min={0} max={100}
+                                    value={perKeyBrightness === 0 ? 0 : Math.max(1, Math.round((perKeyBrightness / 255) * 100))}
+                                    onChange={(e) => handlePerKeyBrightnessChange(Math.round(Math.min(100, Math.max(0, parseInt(e.target.value) || 0)) * 2.55))}
+                                    className="w-8 text-right bg-transparent border-b border-transparent hover:border-text-muted focus:border-primary focus:text-text-primary outline-none text-xs font-mono [appearance:textfield] [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none"
+                                />%
+                            </span>
                         </label>
                         <input
                             type="range" min="0" max="255"
@@ -657,9 +667,17 @@ export function ColorPicker({ definition, selectedKeyIndices = [], onKeyColorCha
 
                     {/* Brightness */}
                     <div className="space-y-1">
-                        <label className="text-xs font-semibold text-text-muted flex justify-between">
+                        <label className="text-xs font-semibold text-text-muted flex justify-between items-center">
                             <span>Brightness</span>
-                            <span>{brightness === 0 ? '0' : Math.max(1, Math.round((brightness / 255) * 100))}%</span>
+                            <span className="flex items-center gap-0.5">
+                                <input
+                                    type="number"
+                                    min={0} max={100}
+                                    value={brightness === 0 ? 0 : Math.max(1, Math.round((brightness / 255) * 100))}
+                                    onChange={(e) => handleBrightnessChange(Math.round(Math.min(100, Math.max(0, parseInt(e.target.value) || 0)) * 2.55))}
+                                    className="w-8 text-right bg-transparent border-b border-transparent hover:border-text-muted focus:border-primary focus:text-text-primary outline-none text-xs font-mono [appearance:textfield] [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none"
+                                />%
+                            </span>
                         </label>
                         <input
                             type="range" min="0" max="255"
@@ -672,9 +690,17 @@ export function ColorPicker({ definition, selectedKeyIndices = [], onKeyColorCha
                     {/* Effect Speed */}
                     {effectId > 1 && (
                         <div className="space-y-1">
-                            <label className="text-xs font-semibold text-text-muted flex justify-between">
+                            <label className="text-xs font-semibold text-text-muted flex justify-between items-center">
                                 <span>Speed</span>
-                                <span>{speed === 0 ? '0' : Math.max(1, Math.round((speed / 255) * 100))}%</span>
+                                <span className="flex items-center gap-0.5">
+                                    <input
+                                        type="number"
+                                        min={0} max={100}
+                                        value={speed === 0 ? 0 : Math.max(1, Math.round((speed / 255) * 100))}
+                                        onChange={(e) => handleSpeedChange(Math.round(Math.min(100, Math.max(0, parseInt(e.target.value) || 0)) * 2.55))}
+                                        className="w-8 text-right bg-transparent border-b border-transparent hover:border-text-muted focus:border-primary focus:text-text-primary outline-none text-xs font-mono [appearance:textfield] [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none"
+                                    />%
+                                </span>
                             </label>
                             <input
                                 type="range" min="0" max="255"
@@ -787,19 +813,25 @@ export function ColorPicker({ definition, selectedKeyIndices = [], onKeyColorCha
             {/* Post-test question */}
             {testPhase === 'asking' && (
                 <div className="bg-surface border border-primary/30 rounded-lg p-3 space-y-2">
-                    <div className="text-xs font-semibold text-text-primary">Did you see the lights flash?</div>
-                    <div className="flex gap-2">
+                    <div className="text-xs font-semibold text-text-primary">Did all the keys light up?</div>
+                    <div className="flex flex-col gap-1.5">
                         <button
-                            onClick={() => handleTestAnswer(true)}
-                            className="flex-1 py-2 rounded-md text-xs font-semibold bg-green-500/10 text-green-400 border border-green-500/20 hover:bg-green-500/20 transition-colors"
+                            onClick={() => handleTestAnswer('all')}
+                            className="w-full py-2 rounded-md text-xs font-semibold bg-green-500/10 text-green-400 border border-green-500/20 hover:bg-green-500/20 transition-colors"
                         >
-                            Yes, they worked
+                            All keys flashed
                         </button>
                         <button
-                            onClick={() => handleTestAnswer(false)}
-                            className="flex-1 py-2 rounded-md text-xs font-semibold bg-red-500/10 text-red-400 border border-red-500/20 hover:bg-red-500/20 transition-colors"
+                            onClick={() => handleTestAnswer('some')}
+                            className="w-full py-2 rounded-md text-xs font-semibold bg-yellow-500/10 text-yellow-400 border border-yellow-500/20 hover:bg-yellow-500/20 transition-colors"
                         >
-                            No, nothing happened
+                            Some keys flashed
+                        </button>
+                        <button
+                            onClick={() => handleTestAnswer('none')}
+                            className="w-full py-2 rounded-md text-xs font-semibold bg-red-500/10 text-red-400 border border-red-500/20 hover:bg-red-500/20 transition-colors"
+                        >
+                            No keys lit up
                         </button>
                     </div>
                 </div>
@@ -817,6 +849,13 @@ export function ColorPicker({ definition, selectedKeyIndices = [], onKeyColorCha
             {testPhase === 'troubleshoot' && diagResult && (
                 <div className="bg-surface border border-yellow-500/30 rounded-lg p-3 space-y-3">
                     <div className="text-xs font-semibold text-yellow-400">Troubleshooting</div>
+
+                    {partialFlash && (
+                        <div className="text-[10px] text-yellow-400/80 bg-yellow-500/10 border border-yellow-500/20 rounded-md p-2 space-y-0.5">
+                            <div className="font-semibold">Partial lighting detected</div>
+                            <div className="text-text-muted">This may indicate individual LED failures or a loose module connection. Try reseating the keyboard module.</div>
+                        </div>
+                    )}
 
                     {/* Current state readout */}
                     <div className="text-[10px] font-mono text-text-muted space-y-0.5">

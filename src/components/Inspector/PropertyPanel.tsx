@@ -144,7 +144,7 @@ export function PropertyPanel({ activeMode, activeDefinition, selectedModuleId, 
 
             {activeMode === 'settings' && (
                 <div className="space-y-4">
-                    <ConfigHistory onPerKeyColorsRestore={onPerKeyColorsRestore} />
+                    <ConfigHistory onPerKeyColorsRestore={onPerKeyColorsRestore} keyColors={keyColors} />
 
                     <div className="bg-surface border border-border p-4 rounded-lg space-y-3">
                         <h3 className="text-sm font-semibold flex items-center gap-2">

@@ -105,6 +105,18 @@ export function VirtualKeyboard({ definition, pressedKeys, selectedKeyIndices, o
                     const isPressed = key.code && pressedKeys.includes(key.code);
                     const keyColor = keyColors?.[idx];
                     const displayColor = keyColor ?? globalColor ?? null;
+                    // Boost glow for very dim colors so they're still visible
+                    let glowColor = displayColor;
+                    if (displayColor) {
+                        const m = displayColor.match(/rgb\((\d+),(\d+),(\d+)\)/);
+                        if (m) {
+                            const mx = Math.max(+m[1], +m[2], +m[3]);
+                            if (mx > 0 && mx < 60) {
+                                const s = 60 / mx;
+                                glowColor = `rgb(${Math.min(255, Math.round(+m[1]*s))},${Math.min(255, Math.round(+m[2]*s))},${Math.min(255, Math.round(+m[3]*s))})`;
+                            }
+                        }
+                    }
                     const isMultiLine = key.label.includes('\n');
                     const labelParts = isMultiLine ? key.label.split('\n') : null;
                     // Auto-size text based on label length relative to key width
@@ -133,7 +145,7 @@ export function VirtualKeyboard({ definition, pressedKeys, selectedKeyIndices, o
                                 height: `${key.h * 50 - 4}px`,
                                 ...(displayColor && !isSelected && !isPressed ? {
                                     borderColor: displayColor,
-                                    boxShadow: `inset 0 -3px 0 0 ${displayColor}, 0 0 8px 0 ${displayColor}50`,
+                                    boxShadow: `inset 0 -3px 0 0 ${displayColor}, 0 0 8px 2px ${glowColor}70`,
                                 } : {}),
                             }}
                             onClick={(e) => {

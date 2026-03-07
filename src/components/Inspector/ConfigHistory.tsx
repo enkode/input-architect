@@ -3,7 +3,7 @@ import { storageService, type ConfigSnapshot } from '../../services/StorageServi
 import { hid } from '../../services/HIDService';
 import { useDevice } from '../../context/DeviceContext';
 import { FRAMEWORK_RGB_EFFECTS } from '../../data/definitions/framework16';
-import { RotateCcw, Trash2, Download, Clock, ChevronDown } from 'lucide-react';
+import { RotateCcw, Trash2, Download, Clock, ChevronDown, Save } from 'lucide-react';
 import { clsx } from 'clsx';
 
 function hsvToRgb(h: number, s: number, _v: number): [number, number, number] {
@@ -41,13 +41,17 @@ function formatTimestamp(ts: number): string {
 
 interface ConfigHistoryProps {
     onPerKeyColorsRestore?: (colors: Record<number, string>) => void;
+    keyColors?: Record<number, string>;
 }
 
-export function ConfigHistory({ onPerKeyColorsRestore }: ConfigHistoryProps) {
+export function ConfigHistory({ onPerKeyColorsRestore, keyColors }: ConfigHistoryProps) {
     const { connectedProductId } = useDevice();
     const [snapshots, setSnapshots] = useState<ConfigSnapshot[]>([]);
     const [restoringId, setRestoringId] = useState<string | null>(null);
     const [expanded, setExpanded] = useState(true);
+    const [savingName, setSavingName] = useState('');
+    const [showSaveInput, setShowSaveInput] = useState(false);
+    const [saving, setSaving] = useState(false);
 
     useEffect(() => {
         if (connectedProductId === null) return;
@@ -95,6 +99,34 @@ export function ConfigHistory({ onPerKeyColorsRestore }: ConfigHistoryProps) {
         URL.revokeObjectURL(url);
     };
 
+    const handleManualSave = async () => {
+        if (connectedProductId === null || saving) return;
+        setSaving(true);
+        try {
+            const brightness = await hid.getRGBBrightness();
+            const effectId = await hid.getRGBEffect();
+            const speed = await hid.getRGBEffectSpeed();
+            const color = await hid.getRGBColor();
+            const rgbSettings = brightness !== null && effectId !== null && speed !== null && color !== null
+                ? { brightness, effectId, speed, hue: color[0], saturation: color[1] }
+                : undefined;
+            const perKeyColors = keyColors && Object.keys(keyColors).length > 0 ? keyColors : undefined;
+            const label = savingName.trim() || 'Manual save';
+            storageService.saveSnapshot(connectedProductId, {
+                label: `Manual: ${label}`,
+                rgbSettings,
+                perKeyColors,
+            });
+            setSnapshots(storageService.loadSnapshots(connectedProductId));
+            setSavingName('');
+            setShowSaveInput(false);
+        } catch (err) {
+            console.error('Manual save failed:', err);
+        } finally {
+            setSaving(false);
+        }
+    };
+
     const reversed = [...snapshots].reverse();
 
     return (
@@ -115,6 +147,46 @@ export function ConfigHistory({ onPerKeyColorsRestore }: ConfigHistoryProps) {
                     <p className="text-[10px] text-text-muted">
                         Automatic snapshots of your lighting settings. Restore any previous configuration.
                     </p>
+
+                    {/* Manual save */}
+                    {showSaveInput ? (
+                        <div className="flex gap-1.5">
+                            <input
+                                type="text"
+                                placeholder="Snapshot name..."
+                                value={savingName}
+                                onChange={(e) => setSavingName(e.target.value)}
+                                onKeyDown={(e) => e.key === 'Enter' && handleManualSave()}
+                                className="flex-1 px-2 py-1.5 rounded-md text-[10px] bg-surface-highlight border border-border text-text-primary placeholder:text-text-muted/50 outline-none focus:border-primary"
+                                autoFocus
+                            />
+                            <button
+                                onClick={handleManualSave}
+                                disabled={saving}
+                                className={clsx(
+                                    "px-3 py-1.5 rounded-md text-[10px] font-semibold flex items-center gap-1 transition-colors",
+                                    saving ? "bg-primary/20 text-primary cursor-wait" : "bg-primary/10 text-primary hover:bg-primary/20"
+                                )}
+                            >
+                                <Save size={10} />
+                                {saving ? '...' : 'Save'}
+                            </button>
+                            <button
+                                onClick={() => { setShowSaveInput(false); setSavingName(''); }}
+                                className="px-2 py-1.5 rounded-md text-[10px] text-text-muted hover:text-text-primary transition-colors"
+                            >
+                                Cancel
+                            </button>
+                        </div>
+                    ) : (
+                        <button
+                            onClick={() => setShowSaveInput(true)}
+                            className="w-full py-1.5 rounded-md text-[10px] font-semibold flex items-center justify-center gap-1 bg-surface-highlight hover:bg-primary/10 hover:text-primary text-text-muted transition-colors"
+                        >
+                            <Save size={10} />
+                            Save Current Config
+                        </button>
+                    )}
 
                     {reversed.length === 0 ? (
                         <div className="text-[10px] text-text-muted/50 italic py-4 text-center">
