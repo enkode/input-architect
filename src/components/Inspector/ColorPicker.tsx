@@ -270,13 +270,13 @@ export function ColorPicker({ definition, selectedKeyIndices = [], onKeyColorCha
                         rgbSettings: { brightness, effectId, speed, hue: h, saturation: s },
                     });
                     log('Settings also saved to localStorage');
+                    // Auto-snapshot for config history
+                    storageService.saveSnapshot(connectedProductId, {
+                        label: 'Saved to device',
+                        rgbSettings: { brightness, effectId, speed, hue: h, saturation: s },
+                        perKeyColors: keyColors && Object.keys(keyColors).length > 0 ? keyColors : undefined,
+                    });
                 }
-                // Auto-snapshot for config history
-                storageService.saveSnapshot(connectedProductId, {
-                    label: 'Saved to device',
-                    rgbSettings: { brightness, effectId, speed, hue: h, saturation: s },
-                    perKeyColors: keyColors && Object.keys(keyColors).length > 0 ? keyColors : undefined,
-                });
                 setSaveState('saved');
                 setHasUnsavedChanges(false);
                 setTimeout(() => setSaveState('idle'), 2000);
