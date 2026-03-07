@@ -57,7 +57,7 @@ interface ColorPickerProps {
 }
 
 export function ColorPicker({ definition, selectedKeyIndices = [], onKeyColorChange, keyColors, onGlobalColorChange }: ColorPickerProps) {
-    const { hasPerKeyRGB, connectedProductId } = useDevice();
+    const { hasPerKeyRGB, connectedProductId, restoreComplete } = useDevice();
 
     const [color, setColor] = useState({ r: 255, g: 0, b: 0 });
     const [brightness, setBrightness] = useState(128);
@@ -159,7 +159,7 @@ export function ColorPicker({ definition, selectedKeyIndices = [], onKeyColorCha
         }
     };
 
-    // Load stored diagnostic log and read device state on mount
+    // Load stored diagnostic log on mount
     useEffect(() => {
         const stored = storageService.loadDiagLog();
         if (stored.length > 0) {
@@ -169,11 +169,14 @@ export function ColorPicker({ definition, selectedKeyIndices = [], onKeyColorCha
         const separator = `[${ts}] ─── New Session ───`;
         setDiagLog(prev => [...prev, separator]);
         storageService.appendDiagLog([separator]);
+    }, []);
 
-        if (!hid.isDeviceConnected()) return;
+    // Read device state only after auto-restore has completed
+    useEffect(() => {
+        if (!restoreComplete || !hid.isDeviceConnected()) return;
         readDeviceState();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, []);
+    }, [restoreComplete]);
 
 
     const sendColorUpdate = async (r: number, g: number, b: number) => {
@@ -268,6 +271,12 @@ export function ColorPicker({ definition, selectedKeyIndices = [], onKeyColorCha
                     });
                     log('Settings also saved to localStorage');
                 }
+                // Auto-snapshot for config history
+                storageService.saveSnapshot(connectedProductId, {
+                    label: 'Saved to device',
+                    rgbSettings: { brightness, effectId, speed, hue: h, saturation: s },
+                    perKeyColors: keyColors && Object.keys(keyColors).length > 0 ? keyColors : undefined,
+                });
                 setSaveState('saved');
                 setHasUnsavedChanges(false);
                 setTimeout(() => setSaveState('idle'), 2000);
@@ -458,6 +467,17 @@ export function ColorPicker({ definition, selectedKeyIndices = [], onKeyColorCha
         setResettingLeds(true);
         setShowDiag(true);
         log('═══ RESETTING LIGHTING ═══');
+
+        // Snapshot current state before reset so user can undo
+        if (connectedProductId !== null) {
+            const [h, s] = rgbToHsv(color.r, color.g, color.b);
+            storageService.saveSnapshot(connectedProductId, {
+                label: 'Before lighting reset',
+                rgbSettings: { brightness, effectId, speed, hue: h, saturation: s },
+                perKeyColors: keyColors && Object.keys(keyColors).length > 0 ? keyColors : undefined,
+            });
+        }
+
         try {
             // Set known-good defaults: max brightness, solid color, medium speed, red
             const defaults = {
@@ -611,7 +631,7 @@ export function ColorPicker({ definition, selectedKeyIndices = [], onKeyColorCha
                     <div className="space-y-1">
                         <label className="text-xs font-semibold text-text-muted flex justify-between">
                             <span>Brightness</span>
-                            <span>{Math.round((perKeyBrightness / 255) * 100)}%</span>
+                            <span>{perKeyBrightness === 0 ? '0' : Math.max(1, Math.round((perKeyBrightness / 255) * 100))}%</span>
                         </label>
                         <input
                             type="range" min="0" max="255"
@@ -639,7 +659,7 @@ export function ColorPicker({ definition, selectedKeyIndices = [], onKeyColorCha
                     <div className="space-y-1">
                         <label className="text-xs font-semibold text-text-muted flex justify-between">
                             <span>Brightness</span>
-                            <span>{Math.round((brightness / 255) * 100)}%</span>
+                            <span>{brightness === 0 ? '0' : Math.max(1, Math.round((brightness / 255) * 100))}%</span>
                         </label>
                         <input
                             type="range" min="0" max="255"
@@ -654,7 +674,7 @@ export function ColorPicker({ definition, selectedKeyIndices = [], onKeyColorCha
                         <div className="space-y-1">
                             <label className="text-xs font-semibold text-text-muted flex justify-between">
                                 <span>Speed</span>
-                                <span>{Math.round((speed / 255) * 100)}%</span>
+                                <span>{speed === 0 ? '0' : Math.max(1, Math.round((speed / 255) * 100))}%</span>
                             </label>
                             <input
                                 type="range" min="0" max="255"

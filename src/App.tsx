@@ -17,7 +17,7 @@ import { clsx } from 'clsx';
 import { Stethoscope, ChevronDown, Plus } from 'lucide-react';
 
 function App() {
-  const { isConnected, isConnecting, connectDevice, connectToDevice, switchDevice, disconnectDevice, connectedProductId, connectedProductName, protocolVersion, hasPerKeyRGB, permittedDevices } = useDevice();
+  const { isConnected, isConnecting, connectDevice, connectToDevice, switchDevice, disconnectDevice, connectedProductId, connectedProductName, protocolVersion, hasPerKeyRGB, permittedDevices, markRestoreComplete } = useDevice();
 
   const otherDevices = permittedDevices.filter(d => d.productId !== connectedProductId);
 
@@ -119,30 +119,45 @@ function App() {
       perKeyRestoredRef.current = true;
       const stored = storageService.loadDeviceState(connectedProductId);
 
-      // Restore global RGB settings from localStorage
-      if (stored?.rgbSettings) {
-        const { brightness, effectId, speed, hue, saturation } = stored.rgbSettings;
-        console.log(`Auto-restoring RGB settings: brightness=${brightness}, effect=${effectId}, speed=${speed}, H=${hue}, S=${saturation}`);
-        (async () => {
-          try {
+      // Snapshot current stored state as "Session start" for history
+      if (stored?.rgbSettings || stored?.perKeyColors) {
+        storageService.saveSnapshot(connectedProductId, {
+          label: 'Session start',
+          rgbSettings: stored.rgbSettings,
+          perKeyColors: stored.perKeyColors,
+        });
+      }
+
+      const doRestore = async () => {
+        try {
+          // Restore global RGB settings from localStorage
+          if (stored?.rgbSettings) {
+            const { brightness, effectId, speed, hue, saturation } = stored.rgbSettings;
+            console.log(`Auto-restoring RGB settings: brightness=${brightness}, effect=${effectId}, speed=${speed}, H=${hue}, S=${saturation}`);
             await hid.setRGBBrightness(brightness);
             await hid.setRGBEffect(effectId);
             await hid.setRGBEffectSpeed(speed);
             await hid.setRGBColor(hue, saturation);
             console.log('RGB settings restored from localStorage');
-          } catch (err) {
-            console.error('Failed to restore RGB settings:', err);
           }
-        })();
-      }
 
-      // Restore per-key colors
-      if (stored?.perKeyColors && Object.keys(stored.perKeyColors).length > 0) {
-        setKeyColors(stored.perKeyColors);
-        if (hasPerKeyRGB) {
-          restorePerKeyColorsToDevice(stored.perKeyColors, activeDefinition);
+          // Restore per-key colors
+          if (stored?.perKeyColors && Object.keys(stored.perKeyColors).length > 0) {
+            setKeyColors(stored.perKeyColors);
+            if (hasPerKeyRGB) {
+              await restorePerKeyColorsToDevice(stored.perKeyColors, activeDefinition);
+            }
+          }
+        } catch (err) {
+          console.error('Failed to restore settings:', err);
+        } finally {
+          markRestoreComplete();
         }
-      }
+      };
+      doRestore();
+    } else if (isConnected && perKeyRestoredRef.current) {
+      // Already restored in this session (e.g. layer change re-trigger)
+      markRestoreComplete();
     }
   }, [isConnected, selectedLayer, activeDefinition]);
 

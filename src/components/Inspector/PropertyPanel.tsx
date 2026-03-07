@@ -3,6 +3,7 @@ import { ColorPicker } from './ColorPicker';
 import { KeymapFlow } from './KeymapFlow';
 import { RapidTriggerControl } from './RapidTriggerControl';
 import { LEDMatrixControls } from './LEDMatrixControls';
+import { ConfigHistory } from './ConfigHistory';
 import { Settings2, Download, Upload, CheckCircle2 } from 'lucide-react';
 import { configService } from '../../services/ConfigService';
 import { clsx } from 'clsx';
@@ -142,14 +143,16 @@ export function PropertyPanel({ activeMode, activeDefinition, selectedModuleId, 
             )}
 
             {activeMode === 'settings' && (
-                <div className="space-y-6">
+                <div className="space-y-4">
+                    <ConfigHistory onPerKeyColorsRestore={onPerKeyColorsRestore} />
+
                     <div className="bg-surface border border-border p-4 rounded-lg space-y-3">
                         <h3 className="text-sm font-semibold flex items-center gap-2">
                             <Settings2 size={16} />
-                            Backup & Restore
+                            Full Backup & Restore
                         </h3>
                         <p className="text-[10px] text-text-muted">
-                            Export your full configuration (all 6 layers, RGB settings, per-key colors) to a file, or restore from a backup.
+                            Export your full configuration (all 6 layers, RGB settings, per-key colors) to a JSON file, or restore from a backup file.
                         </p>
                         <div className="flex gap-2">
                             <button

@@ -15,11 +15,13 @@ interface DeviceContextType {
     connectedProductName: string | null;
     protocolVersion: number;
     hasPerKeyRGB: boolean;
+    restoreComplete: boolean;
     permittedDevices: PermittedDevice[];
     connectDevice: () => Promise<void>;
     connectToDevice: (device: PermittedDevice) => Promise<void>;
     switchDevice: (targetDevice?: PermittedDevice) => Promise<void>;
     disconnectDevice: () => void;
+    markRestoreComplete: () => void;
     activeLayer: number;
     setActiveLayer: (layer: number) => void;
 }
@@ -34,7 +36,10 @@ export function DeviceProvider({ children }: { children: ReactNode }) {
     const [protocolVersion, setProtocolVersion] = useState(0);
     const [hasPerKeyRGB, setHasPerKeyRGB] = useState(false);
     const [activeLayer, setActiveLayer] = useState(0);
+    const [restoreComplete, setRestoreComplete] = useState(false);
     const [permittedDevices, setPermittedDevices] = useState<PermittedDevice[]>([]);
+
+    const markRestoreComplete = useCallback(() => setRestoreComplete(true), []);
 
     const refreshPermittedDevices = useCallback(async () => {
         const devices = await hid.getPermittedDevices();
@@ -61,6 +66,7 @@ export function DeviceProvider({ children }: { children: ReactNode }) {
             setConnectedProductName(hid.getConnectedProductName());
             setProtocolVersion(hid.getDetectedProtocolVersion());
             setHasPerKeyRGB(hid.hasPerKeySupport);
+            setRestoreComplete(false);
             refreshPermittedDevices();
         });
 
@@ -158,11 +164,13 @@ export function DeviceProvider({ children }: { children: ReactNode }) {
             connectedProductName,
             protocolVersion,
             hasPerKeyRGB,
+            restoreComplete,
             permittedDevices,
             connectDevice,
             connectToDevice,
             switchDevice,
             disconnectDevice,
+            markRestoreComplete,
             activeLayer,
             setActiveLayer
         }}>
