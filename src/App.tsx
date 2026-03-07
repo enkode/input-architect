@@ -14,6 +14,7 @@ import { configService } from './services/ConfigService';
 import { storageService } from './services/StorageService';
 import { log } from './services/Logger';
 import { hid, type HealthCheckResult } from './services/HIDService';
+import { ANSI_KEY_PRESETS, MACROPAD_KEY_PRESETS } from './data/key-presets';
 import { parseKeyPositions, getRowRangeIndices } from './utils/keyboardLayout';
 import type { VIAKeyboardDefinition } from './types/via';
 import { clsx } from 'clsx';
@@ -251,6 +252,32 @@ function App() {
     }
   };
 
+  const activePresets = connectedProductId === 0x0013 ? MACROPAD_KEY_PRESETS : ANSI_KEY_PRESETS;
+
+  const handlePresetSelect = (indices: number[], ctrl: boolean) => {
+    if (ctrl) {
+      // Ctrl+click: toggle — add if not all present, remove if all are
+      setSelectedKeyIndices(prev => {
+        const allPresent = indices.every(i => prev.includes(i));
+        if (allPresent) {
+          return prev.filter(i => !indices.includes(i));
+        } else {
+          const merged = new Set([...prev, ...indices]);
+          return Array.from(merged);
+        }
+      });
+    } else {
+      // Plain click: toggle preset (deselect if already exactly active, otherwise select)
+      setSelectedKeyIndices(prev => {
+        const allPresent = indices.every(i => prev.includes(i));
+        if (allPresent && prev.length === indices.length) {
+          return []; // exact match — deselect all
+        }
+        return [...indices];
+      });
+    }
+  };
+
   return (
     <MainLayout
       sidebarLeft={
@@ -434,6 +461,9 @@ function App() {
           globalColor={globalColor}
           shiftHoverPreviewIndices={shiftHoverPreviewIndices}
           onKeyHover={setHoveredKeyIndex}
+          activeMode={activeMode}
+          presets={activePresets}
+          onPresetSelect={handlePresetSelect}
         />
       ) : (
         <div className="w-full h-full flex flex-col items-center justify-center gap-6 text-center">

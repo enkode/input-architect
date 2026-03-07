@@ -85,12 +85,13 @@ Open **http://localhost:5173** in Chrome 89+ or Edge 89+ (WebHID required).
 - **Contextual per-key mode** — automatically activates when you select keys, returns to global mode when you deselect
 - **Shift+click range selection** — click a key, then Shift+click another on the same row to select the entire range; shows a hover preview while holding Shift
 - **Ctrl+click multi-select** — toggle individual keys in and out of the current selection
+- **Key group presets** — one-click selection of Letters, Numbers, F-Keys, WASD, FPS Kit, MOBA, Arrows, and Modifiers; Ctrl+click presets to combine groups
 - **Per-key brightness** — independent brightness slider for selected keys
 - **Editable slider values** — click the number next to any slider to type an exact value
 - **Global controls** — brightness, effect speed, and color
 - **HSV and RGB** color pickers with live preview
 - **Dim key glow** — very dim per-key colors still show a subtle glow on the virtual keyboard
-- **Per-key mode cleanup** — LEDs return to normal animations when the app closes or disconnects
+- **Persistent per-key colors** — LEDs stay lit after closing the app; colors are stored in firmware RAM until power cycle
 - **Save to device** — persist settings in keyboard EEPROM
 
 ### Config History & Snapshots
@@ -197,10 +198,11 @@ npm run tauri:build
 1. Click any key on the virtual keyboard — per-key mode activates automatically
 2. **Shift+click** another key on the same row to select the entire range (a hover preview shows which keys will be selected)
 3. **Ctrl+click** to toggle individual keys in or out of the selection
-4. Adjust the R, G, B sliders and brightness — colors update in real time on the hardware
-5. Click the number next to any slider to type an exact value
-6. Deselect all keys to return to global mode
-7. When the app closes or disconnects, LEDs return to their normal animations
+4. Use the **preset chips** below the keyboard to quickly select key groups (Letters, Numbers, F-Keys, WASD, FPS Kit, MOBA, Arrows, Mods); Ctrl+click presets to combine groups
+5. Adjust the R, G, B sliders and brightness — colors update in real time on the hardware
+6. Click the number next to any slider to type an exact value
+7. Deselect all keys to return to global mode
+8. Per-key colors persist after closing the app — they stay active on the hardware until power cycle
 
 ### Managing Config History
 
@@ -321,6 +323,7 @@ src/
 │   ├── definitions/
 │   │   ├── framework16.ts      # ANSI keyboard (78 keys, 97 LEDs)
 │   │   └── macropad.ts         # RGB macropad (24 keys, 24 LEDs)
+│   ├── key-presets.ts           # Key group presets (Letters, WASD, FPS, etc.)
 │   └── firmware-catalog.ts     # Firmware entries & bootloader instructions
 │
 ├── types/

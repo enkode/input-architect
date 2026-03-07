@@ -62,17 +62,6 @@ export class HIDService {
     private _reconnecting: boolean = false;
 
     constructor() {
-        // Disable per-key mode before the app closes so LEDs return to normal animations
-        window.addEventListener('beforeunload', () => {
-            if (this._perKeyEnabled && this.device?.opened) {
-                // Synchronous best-effort: send disable command via sendReport
-                const data = new Uint8Array(32);
-                data[0] = RGB_REMOTE_CMD;
-                data[1] = RGB_REMOTE_DISABLE;
-                this.device.sendReport(0, data).catch(() => {});
-            }
-        });
-
         // Auto-reconnect when a supported device appears (e.g. after sleep/wake)
         navigator.hid.addEventListener('connect', async (e: HIDConnectionEvent) => {
             const d = e.device;
@@ -616,13 +605,6 @@ export class HIDService {
         if (this.disconnectHandler) {
             navigator.hid.removeEventListener('disconnect', this.disconnectHandler);
             this.disconnectHandler = null;
-        }
-        // Disable per-key mode before closing so LEDs return to normal animations
-        if (this._perKeyEnabled && this.device?.opened) {
-            const data = new Uint8Array(32);
-            data[0] = RGB_REMOTE_CMD;
-            data[1] = RGB_REMOTE_DISABLE;
-            this.device.sendReport(0, data).catch(() => {});
         }
         if (this.device?.opened) {
             this.device.close().catch((err) => {
