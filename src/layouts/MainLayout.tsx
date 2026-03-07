@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { PanelLeft, PanelRight, Settings } from 'lucide-react';
+import { PanelLeft, PanelRight } from 'lucide-react';
 import { clsx } from 'clsx';
 import { twMerge } from 'tailwind-merge';
 
@@ -49,11 +49,7 @@ export function MainLayout({ children, sidebarLeft, sidebarRight }: MainLayoutPr
                     <div className="flex items-center gap-4">
                         <span className="text-sm font-bold tracking-tight text-text-primary">FRAMEWORK INPUT ARCHITECT</span>
                     </div>
-                    <div className="flex items-center gap-2">
-                        <button className="p-2 hover:bg-surface rounded text-text-secondary hover:text-primary transition-colors">
-                            <Settings size={18} />
-                        </button>
-                    </div>
+                    <div className="flex items-center gap-2" />
                 </header>
 
                 <div className="flex-1 overflow-hidden relative bg-[url('/grid.svg')] bg-cyber-grid bg-fixed">

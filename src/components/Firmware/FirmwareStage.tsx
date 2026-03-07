@@ -131,9 +131,24 @@ export function FirmwareStage() {
                     {activeStep === 'select' && (
                         <>
                             <h2 className="text-sm font-bold text-text-primary">Choose Firmware</h2>
+
+                            {/* Current firmware detection */}
+                            {isConnected && (
+                                <div className="p-3 rounded-lg bg-primary/5 border border-primary/20 space-y-1">
+                                    <div className="text-[10px] font-bold text-primary uppercase tracking-wider">Currently Installed</div>
+                                    <div className="text-xs text-text-primary font-semibold">
+                                        {hasPerKeyRGB ? 'Per-Key RGB firmware (rgb_remote)' : 'Official Framework QMK (or compatible)'}
+                                    </div>
+                                    <div className="text-[10px] text-text-muted">
+                                        {hasPerKeyRGB
+                                            ? 'Your device supports per-key RGB via the rgb_remote protocol. All features in this app are available.'
+                                            : 'Your device uses standard VIA protocol. Flash the nucleardog firmware below to unlock per-key RGB control.'}
+                                    </div>
+                                </div>
+                            )}
+
                             <p className="text-xs text-text-muted">
-                                Select custom firmware to flash. Compatibility indicates whether this app's features
-                                (key mapping, RGB control) will work after flashing.
+                                Select firmware to flash. To switch firmware, select one below, download it, enter bootloader mode, and copy the .uf2 file to the device.
                             </p>
                             <div className="space-y-3">
                                 {FIRMWARE_CATALOG.map(fw => {
