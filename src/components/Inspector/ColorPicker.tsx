@@ -64,9 +64,8 @@ export function ColorPicker({ definition, selectedKeyIndices = [], onKeyColorCha
     const [effectId, setEffectId] = useState(1);
     const [speed, setSpeed] = useState(128);
     const [effectDropdownOpen, setEffectDropdownOpen] = useState(false);
-    const [isPerKeyMode, setIsPerKeyMode] = useState(false);
-    const [perKeyEnabling, setPerKeyEnabling] = useState(false);
     const [perKeyBrightness, setPerKeyBrightness] = useState(255);
+    const [perKeyActive, setPerKeyActive] = useState(false);
     const [saveState, setSaveState] = useState<'idle' | 'saving' | 'saved' | 'error'>('idle');
     const [hasUnsavedChanges, setHasUnsavedChanges] = useState(false);
     const [diagLog, setDiagLog] = useState<string[]>([]);
@@ -81,6 +80,23 @@ export function ColorPicker({ definition, selectedKeyIndices = [], onKeyColorCha
     const pendingColor = useRef<{ r: number; g: number; b: number } | null>(null);
 
     const hasSelectedKeys = selectedKeyIndices.length > 0;
+    const isPerKeyMode = hasPerKeyRGB && hasSelectedKeys;
+
+    // Auto-enable/disable per-key firmware mode based on selection
+    useEffect(() => {
+        if (!hasPerKeyRGB) return;
+        let cancelled = false;
+        if (isPerKeyMode && !perKeyActive) {
+            hid.enablePerKeyMode().then(ok => {
+                if (!cancelled && ok) setPerKeyActive(true);
+            }).catch(err => console.error('Per-key enable error:', err));
+        } else if (!isPerKeyMode && perKeyActive) {
+            hid.disablePerKeyMode().then(() => {
+                if (!cancelled) setPerKeyActive(false);
+            }).catch(err => console.error('Per-key disable error:', err));
+        }
+        return () => { cancelled = true; };
+    }, [isPerKeyMode, hasPerKeyRGB, perKeyActive]);
 
     // Sync color picker to selected key's existing color
     useEffect(() => {
@@ -207,25 +223,6 @@ export function ColorPicker({ definition, selectedKeyIndices = [], onKeyColorCha
     const handlePerKeyBrightnessChange = (val: number) => {
         setPerKeyBrightness(val);
         sendColorUpdate(color.r, color.g, color.b);
-    };
-
-    const handlePerKeyToggle = async () => {
-        if (perKeyEnabling) return;
-        setPerKeyEnabling(true);
-        try {
-            if (!isPerKeyMode) {
-                const ok = await hid.enablePerKeyMode();
-                if (ok) setIsPerKeyMode(true);
-                else console.warn('Failed to enable per-key mode');
-            } else {
-                await hid.disablePerKeyMode();
-                setIsPerKeyMode(false);
-            }
-        } catch (err) {
-            console.error('Per-key toggle error:', err);
-        } finally {
-            setPerKeyEnabling(false);
-        }
     };
 
     const handleBrightnessChange = (val: number) => {
@@ -535,34 +532,21 @@ export function ColorPicker({ definition, selectedKeyIndices = [], onKeyColorCha
 
     return (
         <div className="space-y-4">
-            {/* Per-Key RGB mode toggle (only when firmware supports it) */}
+            {/* Per-Key RGB mode indicator (only when firmware supports it) */}
             {hasPerKeyRGB && (
-                <div className="bg-surface border border-border rounded-lg p-3">
-                    <div className="flex items-center justify-between">
-                        <div>
-                            <div className="text-xs font-semibold text-text-primary">
-                                {isPerKeyMode ? 'Per-Key Color' : 'Global Color'}
-                            </div>
-                            <div className="text-[10px] text-text-muted">
-                                {isPerKeyMode
-                                    ? (hasSelectedKeys ? `${selectedKeyIndices.length} keys selected` : 'Select keys on the keyboard')
-                                    : 'Applies to all keys'}
-                            </div>
-                        </div>
-                        <button
-                            onClick={handlePerKeyToggle}
-                            disabled={perKeyEnabling}
-                            className={clsx(
-                                "w-10 h-5 rounded-full relative transition-colors",
-                                isPerKeyMode ? 'bg-primary' : 'bg-surface-highlight border border-text-muted',
-                                perKeyEnabling && 'opacity-50'
-                            )}
-                        >
-                            <div className={clsx(
-                                "absolute top-0.5 bottom-0.5 w-4 rounded-full bg-white shadow transition-all",
-                                isPerKeyMode ? 'right-0.5' : 'left-0.5'
-                            )} />
-                        </button>
+                <div className={clsx(
+                    "bg-surface border rounded-lg p-3",
+                    isPerKeyMode ? "border-primary/40" : "border-border"
+                )}>
+                    <div className="text-xs font-semibold text-text-primary">
+                        {isPerKeyMode
+                            ? `Adjusting ${selectedKeyIndices.length} selected key${selectedKeyIndices.length > 1 ? 's' : ''}`
+                            : 'Adjusting all keys'}
+                    </div>
+                    <div className="text-[10px] text-text-muted mt-0.5">
+                        {isPerKeyMode
+                            ? 'Click elsewhere to deselect and return to global mode'
+                            : 'Click keys on the keyboard to adjust individual colors'}
                     </div>
                 </div>
             )}

@@ -376,6 +376,7 @@ function App() {
           pressedKeys={pressedKeys}
           selectedKeyIndices={selectedKeyIndices}
           onKeySelect={handleKeySelect}
+          onDeselectAll={() => setSelectedKeyIndices([])}
           deviceKeymap={deviceKeymap}
           keyColors={keyColors}
           globalColor={globalColor}
