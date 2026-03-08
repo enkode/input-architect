@@ -1,4 +1,4 @@
-import { useMemo } from 'react';
+import { useMemo, useRef, useState, useEffect, useCallback } from 'react';
 import type { VIAKeyboardDefinition } from '../../types/via';
 import { parseKeyPositions } from '../../utils/keyboardLayout';
 import { getKeyLabel } from '../../utils/keycodes';
@@ -55,18 +55,56 @@ export function VirtualKeyboard({ definition, pressedKeys, selectedKeyIndices, o
     }, [renderableKeys]);
 
 
+    const measureRef = useRef<HTMLDivElement>(null);
+    const [scale, setScale] = useState(1);
+
+    const updateScale = useCallback(() => {
+        const el = measureRef.current;
+        if (!el) return;
+        // Measure the full available space, subtract only the keyboard's own padding (24px each side)
+        const pad = 48;
+        const availW = el.clientWidth - pad;
+        const availH = el.clientHeight - pad;
+        const sx = availW / containerSize.width;
+        const sy = availH / containerSize.height;
+        setScale(Math.min(1, sx, sy));
+    }, [containerSize]);
+
+    useEffect(() => {
+        updateScale();
+        const el = measureRef.current;
+        if (!el) return;
+        const observer = new ResizeObserver(updateScale);
+        observer.observe(el);
+        return () => observer.disconnect();
+    }, [updateScale]);
+
+    const scaledW = containerSize.width * scale;
+    const scaledH = containerSize.height * scale;
+
     return (
-        <div
-            className="relative w-full h-full bg-surface/50 rounded-xl border border-border overflow-auto p-8 flex items-center justify-center"
-            onClick={(e) => e.stopPropagation()}
-        >
+        <div ref={measureRef} className="w-full h-full flex items-center justify-center" onClick={(e) => e.stopPropagation()}>
             <div
-                className="relative"
-                style={{
-                    width: `${containerSize.width}px`,
-                    height: `${containerSize.height}px`
-                }}
+                className="bg-surface/50 rounded-xl border border-border overflow-hidden"
+                style={{ padding: '24px' }}
             >
+                <div
+                    className="relative"
+                    style={{
+                        width: `${scaledW}px`,
+                        height: `${scaledH}px`,
+                    }}
+                >
+                {/* Scale layer — transform doesn't affect layout, so we contain it */}
+                <div
+                    className="absolute top-0 left-0"
+                    style={{
+                        width: `${containerSize.width}px`,
+                        height: `${containerSize.height}px`,
+                        transform: `scale(${scale})`,
+                        transformOrigin: '0 0',
+                    }}
+                >
                 {finalKeys.map((key, idx) => {
                     const isSelected = selectedKeyIndices.includes(idx);
                     const isPreview = !isSelected && shiftHoverPreviewIndices.includes(idx);
@@ -107,7 +145,7 @@ export function VirtualKeyboard({ definition, pressedKeys, selectedKeyIndices, o
                                         : isPressed
                                             ? "bg-white text-black border border-white shadow-[0_0_10px_rgba(255,255,255,0.8)] z-20 scale-95"
                                             : displayColor
-                                                ? "bg-[#27272A] text-text-primary border-2 border-transparent"
+                                                ? "text-text-primary border-2"
                                                 : "bg-[#27272A] text-text-muted border border-black/40 hover:border-text-secondary hover:text-text-primary"
                             )}
                             style={{
@@ -121,8 +159,8 @@ export function VirtualKeyboard({ definition, pressedKeys, selectedKeyIndices, o
                                 } : {}),
                                 ...(displayColor && !isSelected && !isPreview && !isPressed ? {
                                     borderColor: displayColor,
-                                    backgroundColor: `color-mix(in srgb, ${displayColor} 20%, #27272A)`,
-                                    boxShadow: `inset 0 -3px 0 0 ${displayColor}, 0 0 8px 2px ${glowColor}70`,
+                                    backgroundColor: `color-mix(in srgb, ${displayColor} 30%, #27272A)`,
+                                    boxShadow: `inset 0 -3px 0 0 ${displayColor}, 0 0 10px 3px ${glowColor}80`,
                                 } : {}),
                             }}
                             onClick={(e) => {
@@ -145,7 +183,9 @@ export function VirtualKeyboard({ definition, pressedKeys, selectedKeyIndices, o
                         </motion.button>
                     );
                 })}
+                </div>
             </div>
+        </div>
         </div>
     );
 }

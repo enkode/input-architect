@@ -14,7 +14,7 @@ import { configService } from './services/ConfigService';
 import { storageService } from './services/StorageService';
 import { log } from './services/Logger';
 import { hid, type HealthCheckResult } from './services/HIDService';
-import { ANSI_KEY_PRESETS, MACROPAD_KEY_PRESETS } from './data/key-presets';
+import { ANSI_KEY_PRESETS, MACROPAD_KEY_PRESETS, type KeyPreset } from './data/key-presets';
 import { parseKeyPositions, getRowRangeIndices } from './utils/keyboardLayout';
 import type { VIAKeyboardDefinition } from './types/via';
 import { clsx } from 'clsx';
@@ -39,6 +39,9 @@ function App() {
   const [keyColors, setKeyColors] = useState<Record<number, string>>({});
   // globalColor removed — showing VIA backlight color on individual keys was misleading
   // (users thought it was per-key readback from hardware, which firmware doesn't support)
+
+  // Custom key presets (per device, persisted in localStorage)
+  const [customPresets, setCustomPresets] = useState<KeyPreset[]>([]);
 
   // Input Handling for visual feedback
   const [pressedKeys, setPressedKeys] = useState<string[]>([]);
@@ -98,6 +101,15 @@ function App() {
       perKeyRestoredRef.current = false;
     }
   }, [isConnected]);
+
+  // Load custom presets when device connects
+  useEffect(() => {
+    if (connectedProductId !== null) {
+      setCustomPresets(storageService.loadCustomPresets(connectedProductId));
+    } else {
+      setCustomPresets([]);
+    }
+  }, [connectedProductId]);
 
   const refreshKeymap = () => {
     if (isConnected && activeDefinition) {
@@ -212,13 +224,17 @@ function App() {
     });
   };
 
-  const handlePerKeyColorsRestore = (colors: Record<number, string>) => {
+  const handlePerKeyColorsRestore = async (colors: Record<number, string>) => {
     setKeyColors(colors);
     if (connectedProductId !== null) {
       storageService.saveDeviceState(connectedProductId, { perKeyColors: colors });
     }
     if (hasPerKeyRGB && activeDefinition) {
-      restorePerKeyColorsToDevice(colors, activeDefinition);
+      if (Object.keys(colors).length > 0) {
+        await restorePerKeyColorsToDevice(colors, activeDefinition);
+      } else {
+        await hid.disablePerKeyMode();
+      }
     }
   };
 
@@ -238,24 +254,37 @@ function App() {
 
   const handleKeySelect = (index: number, modifiers: { ctrl: boolean; shift: boolean }) => {
     if (modifiers.shift && anchorKeyIndex !== null && activeDefinition) {
-      // Shift-click: select range on same row
+      // Shift-click: select range on same row (additive)
       const keys = parseKeyPositions(activeDefinition);
       const rangeIndices = getRowRangeIndices(anchorKeyIndex, index, keys);
-      setSelectedKeyIndices(rangeIndices);
-    } else if (modifiers.ctrl) {
-      // Ctrl-click: toggle individual key
+      setSelectedKeyIndices(prev => {
+        const merged = new Set([...prev, ...rangeIndices]);
+        return Array.from(merged);
+      });
+    } else {
+      // Plain or Ctrl click: toggle individual key
       setSelectedKeyIndices(prev =>
         prev.includes(index) ? prev.filter(i => i !== index) : [...prev, index]
       );
       setAnchorKeyIndex(index);
-    } else {
-      // Plain click: select single key, set as anchor
-      setSelectedKeyIndices([index]);
-      setAnchorKeyIndex(index);
     }
   };
 
-  const activePresets = connectedProductId === 0x0013 ? MACROPAD_KEY_PRESETS : ANSI_KEY_PRESETS;
+  const builtInPresets = connectedProductId === 0x0013 ? MACROPAD_KEY_PRESETS : ANSI_KEY_PRESETS;
+  const activePresets = [...builtInPresets, ...customPresets];
+  const customPresetIds = useMemo(() => new Set(customPresets.map(p => p.id)), [customPresets]);
+
+  const handleSaveCustomPreset = (label: string, indices: number[]) => {
+    if (connectedProductId === null || indices.length === 0) return;
+    const preset = storageService.saveCustomPreset(connectedProductId, label, indices);
+    setCustomPresets(prev => [...prev, preset]);
+  };
+
+  const handleDeleteCustomPreset = (presetId: string) => {
+    if (connectedProductId === null) return;
+    storageService.deleteCustomPreset(connectedProductId, presetId);
+    setCustomPresets(prev => prev.filter(p => p.id !== presetId));
+  };
 
   const handlePresetSelect = (indices: number[], ctrl: boolean) => {
     if (ctrl) {
@@ -441,6 +470,12 @@ function App() {
             onKeyColorChange={handleKeyColorChange}
             keyColors={keyColors}
             onPerKeyColorsRestore={handlePerKeyColorsRestore}
+            onSelectAll={() => {
+              if (activeDefinition) {
+                const totalKeys = activeDefinition.matrixPositions.length;
+                setSelectedKeyIndices(Array.from({ length: totalKeys }, (_, i) => i));
+              }
+            }}
           />
         ) : (
           <div className="p-4 h-full flex items-center justify-center text-text-muted text-xs">
@@ -458,13 +493,17 @@ function App() {
           selectedKeyIndices={selectedKeyIndices}
           onKeySelect={handleKeySelect}
           onDeselectAll={() => { setSelectedKeyIndices([]); setAnchorKeyIndex(null); }}
+          selectedCount={selectedKeyIndices.length}
           deviceKeymap={deviceKeymap}
           keyColors={keyColors}
           shiftHoverPreviewIndices={shiftHoverPreviewIndices}
           onKeyHover={setHoveredKeyIndex}
           activeMode={activeMode}
           presets={activePresets}
+          customPresetIds={customPresetIds}
           onPresetSelect={handlePresetSelect}
+          onSavePreset={handleSaveCustomPreset}
+          onDeletePreset={handleDeleteCustomPreset}
         />
       ) : (
         <div className="w-full h-full flex flex-col items-center justify-center gap-6 text-center">

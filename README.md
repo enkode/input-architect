@@ -86,25 +86,27 @@ Open **http://localhost:5173** in Chrome 89+ or Edge 89+ (WebHID required).
 - **Shift+click range selection** — click a key, then Shift+click another to select the entire range; works across rows too (selects all keys on rows between anchor and target)
 - **Ctrl+click multi-select** — toggle individual keys in and out of the current selection
 - **Key group presets** — one-click selection of Letters, Numbers, F-Keys, WASD, FPS Kit, MOBA, Arrows, and Modifiers; Ctrl+click presets to combine groups
-- **Per-key brightness** — independent brightness slider for selected keys
+- **Per-key brightness** — independent brightness slider scales all selected keys proportionally (preserves individual colors when adjusting mixed selections)
 - **Editable slider values** — click the number next to any slider to type an exact value
 - **Global controls** — brightness, effect speed, and color
 - **HSV and RGB** color pickers with live preview
 - **Dim key glow** — very dim per-key colors still show a subtle glow on the virtual keyboard
 - **Persistent per-key colors** — LEDs stay lit after closing the app; colors are stored in firmware RAM until power cycle
-- **Save to device** — persist settings in keyboard EEPROM
+- **Custom key presets** — save and name your own key selections alongside built-in presets
 
 ### Config History & Snapshots
-- **Automatic snapshots** — lighting config is auto-saved on save, reset, and session start
+- **Unified save** — "Save Config" writes to EEPROM (survives power cycles), updates localStorage (auto-restore on reconnect), and creates a named snapshot — one button does everything
+- **Automatic snapshots** — lighting config is auto-saved on reset and session start
 - **Named saves** — create manual snapshots with custom names for easy identification
-- **Restore any snapshot** — roll back to any previous lighting configuration with one click
-- **Export as JSON** — export snapshots for backup or sharing
-- **Available everywhere** — accessible from both the Lighting and Settings pages
+- **Restore any snapshot** — roll back to any previous lighting configuration; per-key colors auto-select all keys so you can immediately adjust brightness
+- **Full backup & restore** — export/import complete device configurations (all 6 keymap layers + RGB settings + per-key colors) as JSON
+- **Export snapshots** — export individual snapshots as JSON for backup or sharing
 
 ### Device Management
 - **Multi-device quick switching** — grant access to keyboard and macropad separately, then switch between them with one click
-- **Auto-reconnect** — automatically reconnects to your device after sleep/wake cycles
+- **Auto-reconnect** — automatically reconnects to your device after sleep/wake cycles and re-applies all RGB settings
 - **Firmware detection** — the Firmware page shows your currently installed firmware type with guidance on available options
+- **Responsive layout** — keyboard visualization auto-scales to fit any window size with proper padding
 
 ### Diagnostics & Logging
 - **LED diagnostics** — test LEDs with a white/red/green/blue flash sequence, then report whether all, some, or none lit up; auto-troubleshooting suggests quick fixes
@@ -192,7 +194,6 @@ npm run tauri:build
 **Global Mode:**
 1. Navigate to the **Lighting** tab
 2. Adjust brightness, effect, speed, and color using the inspector panel
-3. Click **Save to Device** to persist changes
 
 **Per-Key Mode** (requires [custom firmware](#custom-firmware)):
 1. Click any key on the virtual keyboard — per-key mode activates automatically
@@ -201,16 +202,16 @@ npm run tauri:build
 4. Use the **preset chips** below the keyboard to quickly select key groups (Letters, Numbers, F-Keys, WASD, FPS Kit, MOBA, Arrows, Mods); Ctrl+click presets to combine groups
 5. Adjust the R, G, B sliders and brightness — colors update in real time on the hardware
 6. Click the number next to any slider to type an exact value
-7. Deselect all keys to return to global mode
+7. Deselect all keys (click empty area or use **Clear** button) to return to global mode
 8. Per-key colors persist after closing the app — they stay active on the hardware until power cycle
 
-### Managing Config History
+### Saving & Restoring Configs
 
-1. Open the **Config History** panel from the Lighting or Settings page
-2. Snapshots are created automatically when you save, reset, or start a session
-3. Click **Save Snapshot** to create a named save you can identify later
-4. Click any snapshot to restore it
-5. Use the **Export** button to download snapshots as a JSON file
+1. Open the **Saved Configs** panel on the Lighting page
+2. Click **Save Current Config** — this writes to EEPROM, updates localStorage, and creates a named snapshot
+3. Restoring a snapshot applies VIA settings first, then per-key colors, and auto-selects all keys so you can immediately adjust brightness
+4. Use the **Export** button to download snapshots as JSON
+5. For a complete device backup (all layers + RGB), use **Full Backup & Restore** on the Settings page
 
 ### Flashing Firmware
 

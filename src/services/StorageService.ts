@@ -104,6 +104,64 @@ class StorageService {
             console.warn('Snapshot delete failed:', e);
         }
     }
+
+    renameSnapshot(productId: number, snapshotId: string, newLabel: string): void {
+        const snapshots = this.loadSnapshots(productId);
+        const idx = snapshots.findIndex(s => s.id === snapshotId);
+        if (idx >= 0) {
+            snapshots[idx].label = newLabel;
+            try {
+                localStorage.setItem(this.snapshotKey(productId), JSON.stringify(snapshots));
+            } catch (e) {
+                console.warn('Snapshot rename failed:', e);
+            }
+        }
+    }
+
+    // --- Custom Key Presets ---
+
+    private readonly PRESET_MAX = 20;
+
+    private presetKey(productId: number): string {
+        return `${STORAGE_PREFIX}:custom-presets:${productId.toString(16)}`;
+    }
+
+    saveCustomPreset(productId: number, label: string, indices: number[]): { id: string; label: string; indices: number[] } {
+        const preset = {
+            id: `custom-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
+            label,
+            indices,
+        };
+        const existing = this.loadCustomPresets(productId);
+        existing.push(preset);
+        while (existing.length > this.PRESET_MAX) {
+            existing.shift();
+        }
+        try {
+            localStorage.setItem(this.presetKey(productId), JSON.stringify(existing));
+        } catch (e) {
+            console.warn('Custom preset save failed:', e);
+        }
+        return preset;
+    }
+
+    loadCustomPresets(productId: number): { id: string; label: string; indices: number[] }[] {
+        try {
+            const raw = localStorage.getItem(this.presetKey(productId));
+            return raw ? JSON.parse(raw) : [];
+        } catch {
+            return [];
+        }
+    }
+
+    deleteCustomPreset(productId: number, presetId: string): void {
+        const presets = this.loadCustomPresets(productId).filter(p => p.id !== presetId);
+        try {
+            localStorage.setItem(this.presetKey(productId), JSON.stringify(presets));
+        } catch (e) {
+            console.warn('Custom preset delete failed:', e);
+        }
+    }
 }
 
 export const storageService = new StorageService();

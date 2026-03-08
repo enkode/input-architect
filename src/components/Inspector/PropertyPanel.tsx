@@ -19,10 +19,11 @@ interface PropertyPanelProps {
     onKeymapChange?: () => void;
     onKeyColorChange?: (indices: number[], color: string | null) => void;
     keyColors?: Record<number, string>;
-    onPerKeyColorsRestore?: (colors: Record<number, string>) => void;
+    onPerKeyColorsRestore?: (colors: Record<number, string>) => Promise<void> | void;
+    onSelectAll?: () => void;
 }
 
-export function PropertyPanel({ activeMode, activeDefinition, selectedModuleId, selectedKeyIndices = [], selectedLayer = 0, onConfigRestore, onKeymapChange, onKeyColorChange, keyColors, onPerKeyColorsRestore }: PropertyPanelProps) {
+export function PropertyPanel({ activeMode, activeDefinition, selectedModuleId, selectedKeyIndices = [], selectedLayer = 0, onConfigRestore, onKeymapChange, onKeyColorChange, keyColors, onPerKeyColorsRestore, onSelectAll }: PropertyPanelProps) {
     const [backupState, setBackupState] = useState<'idle' | 'backing-up' | 'done' | 'error'>('idle');
     const [backupProgress, setBackupProgress] = useState(0);
 
@@ -97,7 +98,7 @@ export function PropertyPanel({ activeMode, activeDefinition, selectedModuleId, 
         <div className="p-4 space-y-4 h-full">
             <div className="flex items-center justify-between mb-2">
                 <h2 className="text-xs font-bold text-primary uppercase tracking-widest border-b border-primary/30 pb-1">
-                    {activeMode === 'mapping' ? 'Key Mapping' : 'Lighting'}
+                    {activeMode === 'mapping' ? 'Key Mapping' : activeMode === 'settings' ? 'Settings' : 'Lighting'}
                 </h2>
                 <span className="text-[10px] font-mono text-text-muted">
                     {selectedModuleId.toUpperCase()}
@@ -124,23 +125,28 @@ export function PropertyPanel({ activeMode, activeDefinition, selectedModuleId, 
                         selectedKeyIndices={selectedKeyIndices}
                         onKeyColorChange={onKeyColorChange}
                         keyColors={keyColors}
+                        onSelectAll={onSelectAll}
                     />
-                    <ConfigHistory onPerKeyColorsRestore={onPerKeyColorsRestore} keyColors={keyColors} />
+                    <ConfigHistory onPerKeyColorsRestore={onPerKeyColorsRestore} keyColors={keyColors} onSelectAll={onSelectAll} />
                 </>
             )}
 
             {activeMode === 'settings' && (
                 <div className="space-y-4">
-                    <ConfigHistory onPerKeyColorsRestore={onPerKeyColorsRestore} keyColors={keyColors} />
-
                     <div className="bg-surface border border-border p-4 rounded-lg space-y-3">
                         <h3 className="text-sm font-semibold flex items-center gap-2">
                             <Settings2 size={16} />
                             Full Backup & Restore
                         </h3>
                         <p className="text-[10px] text-text-muted">
-                            Export your full configuration (all 6 layers, RGB settings, per-key colors) to a JSON file, or restore from a backup file.
+                            Export or import a complete device backup as a JSON file.
                         </p>
+                        <div className="text-[9px] text-text-muted/70 space-y-0.5 bg-surface-highlight/50 rounded px-2 py-1.5">
+                            <div>Includes:</div>
+                            <div className="pl-2">- All 6 keymap layers (every key binding)</div>
+                            <div className="pl-2">- Global RGB settings (effect, color, brightness, speed)</div>
+                            <div className="pl-2">- Per-key RGB colors (if any are set)</div>
+                        </div>
                         <div className="flex gap-2">
                             <button
                                 onClick={handleBackup}
@@ -149,9 +155,11 @@ export function PropertyPanel({ activeMode, activeDefinition, selectedModuleId, 
                                     "flex-1 py-2 rounded text-xs flex items-center justify-center gap-2 transition-colors",
                                     backupState === 'done'
                                         ? "bg-green-600 text-white"
-                                        : backupState === 'backing-up'
-                                            ? "bg-surface-highlight text-text-muted cursor-wait"
-                                            : "bg-surface-highlight hover:bg-primary hover:text-white"
+                                        : backupState === 'error'
+                                            ? "bg-red-500/20 text-red-400"
+                                            : backupState === 'backing-up'
+                                                ? "bg-surface-highlight text-text-muted cursor-wait"
+                                                : "bg-surface-highlight hover:bg-primary hover:text-white"
                                 )}
                             >
                                 {backupState === 'backing-up' ? (
@@ -162,8 +170,10 @@ export function PropertyPanel({ activeMode, activeDefinition, selectedModuleId, 
                                 ) : backupState === 'done' ? (
                                     <>
                                         <CheckCircle2 size={14} />
-                                        Saved!
+                                        Downloaded!
                                     </>
+                                ) : backupState === 'error' ? (
+                                    'Backup failed'
                                 ) : (
                                     <>
                                         <Download size={14} /> Backup

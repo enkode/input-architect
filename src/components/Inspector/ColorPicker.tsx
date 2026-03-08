@@ -5,7 +5,7 @@ import { log } from '../../services/Logger';
 import { useDevice } from '../../context/DeviceContext';
 import { FRAMEWORK_RGB_EFFECTS } from '../../data/definitions/framework16';
 import { rgbToHsv, hsvToRgb } from '../../utils/color';
-import { Save, ChevronDown, CheckCircle2, RefreshCw, Terminal, Zap, RotateCcw, Download, Trash2 } from 'lucide-react';
+import { ChevronDown, RefreshCw, Terminal, Zap, RotateCcw, Download, Trash2, Search, Wrench } from 'lucide-react';
 import { clsx } from 'clsx';
 import type { VIAKeyboardDefinition } from '../../types/via';
 
@@ -14,9 +14,10 @@ interface ColorPickerProps {
     selectedKeyIndices?: number[];
     onKeyColorChange?: (indices: number[], color: string | null) => void;
     keyColors?: Record<number, string>;
+    onSelectAll?: () => void;
 }
 
-export function ColorPicker({ definition, selectedKeyIndices = [], onKeyColorChange, keyColors }: ColorPickerProps) {
+export function ColorPicker({ definition, selectedKeyIndices = [], onKeyColorChange, keyColors, onSelectAll }: ColorPickerProps) {
     const { hasPerKeyRGB, connectedProductId, restoreComplete } = useDevice();
 
     const [color, setColor] = useState({ r: 255, g: 0, b: 0 });
@@ -26,8 +27,6 @@ export function ColorPicker({ definition, selectedKeyIndices = [], onKeyColorCha
     const [effectDropdownOpen, setEffectDropdownOpen] = useState(false);
     const [perKeyBrightness, setPerKeyBrightness] = useState(255);
     const [perKeyActive, setPerKeyActive] = useState(false);
-    const [saveState, setSaveState] = useState<'idle' | 'saving' | 'saved' | 'error'>('idle');
-    const [hasUnsavedChanges, setHasUnsavedChanges] = useState(false);
     const [logEntries, setLogEntries] = useState<string[]>([]);
     const [showDiag, setShowDiag] = useState(false);
     const [testingLeds, setTestingLeds] = useState(false);
@@ -35,12 +34,15 @@ export function ColorPicker({ definition, selectedKeyIndices = [], onKeyColorCha
     const [diagResult, setDiagResult] = useState<{ brightness: number | null; effect: number | null; speed: number | null; color: [number, number] | null } | null>(null);
     const [resettingLeds, setResettingLeds] = useState(false);
     const [fixingStep, setFixingStep] = useState<string | null>(null);
+    const [probing, setProbing] = useState(false);
+    const [showTools, setShowTools] = useState(false);
 
     const isSending = useRef(false);
     const pendingColor = useRef<{ r: number; g: number; b: number } | null>(null);
 
     const hasSelectedKeys = selectedKeyIndices.length > 0;
     const isPerKeyMode = hasPerKeyRGB && hasSelectedKeys;
+    const hasPerKeyColors = keyColors && Object.keys(keyColors).length > 0;
 
     // Auto-enable per-key firmware mode when keys are selected
     // Do NOT auto-disable on deselect — per-key colors should persist on the keyboard
@@ -161,77 +163,67 @@ export function ColorPicker({ definition, selectedKeyIndices = [], onKeyColorCha
     const handleColorChange = (key: 'r' | 'g' | 'b', val: number) => {
         const newColor = { ...color, [key]: val };
         setColor(newColor);
-        if (!isPerKeyMode) setHasUnsavedChanges(true);
         sendColorUpdate(newColor.r, newColor.g, newColor.b);
     };
 
+    const brightnessTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+
     const handlePerKeyBrightnessChange = (val: number) => {
         setPerKeyBrightness(val);
-        sendColorUpdate(color.r, color.g, color.b);
+
+        // If selected keys have individual per-key colors, scale each one proportionally
+        // instead of overwriting them all with the single picker color
+        const keysWithColors = keyColors ? selectedKeyIndices.filter(idx => keyColors[idx]) : [];
+        if (keysWithColors.length > 0 && definition) {
+            // Debounce to avoid flooding HID with rapid slider changes
+            if (brightnessTimer.current) clearTimeout(brightnessTimer.current);
+            brightnessTimer.current = setTimeout(async () => {
+                const scale = val / 255;
+                // Group keys by color to minimize HID commands
+                const colorGroups: Record<string, number[]> = {};
+                for (const idx of keysWithColors) {
+                    const clr = keyColors![idx];
+                    if (!colorGroups[clr]) colorGroups[clr] = [];
+                    colorGroups[clr].push(idx);
+                }
+                try {
+                    for (const [colorStr, indices] of Object.entries(colorGroups)) {
+                        const match = colorStr.match(/rgb\((\d+),(\d+),(\d+)\)/);
+                        if (!match) continue;
+                        const [, r, g, b] = match.map(Number);
+                        const ledIndices = indices.flatMap(i => definition.ledIndices[i] ?? []);
+                        if (ledIndices.length > 0) {
+                            await hid.setPerKeyColor(
+                                Math.round(r * scale), Math.round(g * scale), Math.round(b * scale),
+                                ledIndices,
+                            );
+                        }
+                    }
+                } catch (err) {
+                    log.errorRgb(`Brightness adjustment failed: ${err}`);
+                }
+            }, 30);
+        } else {
+            // No individual colors — apply picker color at new brightness
+            sendColorUpdate(color.r, color.g, color.b);
+        }
     };
 
     const handleBrightnessChange = (val: number) => {
         setBrightness(val);
-        setHasUnsavedChanges(true);
         hid.setRGBBrightness(val).catch(err => log.rgb(`Brightness set failed: ${err}`));
     };
 
     const handleEffectChange = (id: number) => {
         setEffectId(id);
         setEffectDropdownOpen(false);
-        setHasUnsavedChanges(true);
         log.rgb(`Setting effect to ${id}`);
         hid.setRGBEffect(id).catch(err => log.rgb(`Effect set failed: ${err}`));
     };
 
     const handleSpeedChange = (val: number) => {
         setSpeed(val);
-        setHasUnsavedChanges(true);
         hid.setRGBEffectSpeed(val).catch(err => log.rgb(`Speed set failed: ${err}`));
-    };
-
-    const handleSave = async () => {
-        if (saveState === 'saving') return;
-        setSaveState('saving');
-        log.rgb(`Saving: brightness=${brightness}, effect=${effectId}, speed=${speed}, color=RGB(${color.r},${color.g},${color.b})`);
-        try {
-            const [h, s] = rgbToHsv(color.r, color.g, color.b);
-            log.rgb(`  HSV: H=${h}, S=${s}`);
-            const ok = await hid.saveRGBSettings({
-                brightness,
-                effectId,
-                speed,
-                hue: h,
-                saturation: s,
-            }, (msg: string) => log.rgb(msg));
-            if (ok) {
-                log.rgb('Save SUCCESS');
-                // Also save to localStorage for auto-restore on reconnect
-                if (connectedProductId !== null) {
-                    storageService.saveDeviceState(connectedProductId, {
-                        rgbSettings: { brightness, effectId, speed, hue: h, saturation: s },
-                    });
-                    log.rgb('Settings also saved to localStorage');
-                    // Auto-snapshot for config history
-                    storageService.saveSnapshot(connectedProductId, {
-                        label: 'Saved to device',
-                        rgbSettings: { brightness, effectId, speed, hue: h, saturation: s },
-                        perKeyColors: keyColors && Object.keys(keyColors).length > 0 ? keyColors : undefined,
-                    });
-                }
-                setSaveState('saved');
-                setHasUnsavedChanges(false);
-                setTimeout(() => setSaveState('idle'), 2000);
-            } else {
-                log.rgb('Save FAILED — see details above');
-                setSaveState('error');
-                setTimeout(() => setSaveState('idle'), 3000);
-            }
-        } catch (err) {
-            log.rgb(`Save ERROR: ${err}`);
-            setSaveState('error');
-            setTimeout(() => setSaveState('idle'), 3000);
-        }
     };
 
     const handleTestLeds = async () => {
@@ -240,6 +232,10 @@ export function ColorPicker({ definition, selectedKeyIndices = [], onKeyColorCha
         setTestPhase(null);
         setShowDiag(true);
         log.rgb('═══ LED TEST START ═══');
+
+        // Save original per-key colors (from React state) before test overwrites them
+        const preTestKeyColors = keyColors ? { ...keyColors } : null;
+        setSavedKeyColors(preTestKeyColors);
 
         // Save original VIA state
         const origBrightness = await hid.getRGBBrightness();
@@ -324,6 +320,7 @@ export function ColorPicker({ definition, selectedKeyIndices = [], onKeyColorCha
     };
 
     const [partialFlash, setPartialFlash] = useState(false);
+    const [savedKeyColors, setSavedKeyColors] = useState<Record<number, string> | null>(null);
 
     const handleTestAnswer = async (result: 'all' | 'some' | 'none') => {
         if (result === 'all') {
@@ -337,8 +334,31 @@ export function ColorPicker({ definition, selectedKeyIndices = [], onKeyColorCha
                     const [r2, g2, b2] = hsvToRgb(diagResult.color[0], diagResult.color[1], 255);
                     setColor({ r: r2, g: g2, b: b2 });
                 }
-                log.rgb('Previous settings restored');
+                log.rgb('Previous VIA settings restored');
             }
+            // Re-apply per-key colors that were active before the test
+            const colorsToRestore = savedKeyColors ?? keyColors;
+            if (hasPerKeyRGB && definition && colorsToRestore && Object.keys(colorsToRestore).length > 0) {
+                log.rgb('Re-applying per-key colors...');
+                const enabled = await hid.enablePerKeyMode();
+                if (enabled) {
+                    setPerKeyActive(true);
+                    const colorGroups: Record<string, number[]> = {};
+                    for (const [keyIdx, clr] of Object.entries(colorsToRestore)) {
+                        if (!colorGroups[clr]) colorGroups[clr] = [];
+                        colorGroups[clr].push(Number(keyIdx));
+                    }
+                    for (const [colorStr, keyIndices] of Object.entries(colorGroups)) {
+                        const match = colorStr.match(/rgb\((\d+),(\d+),(\d+)\)/);
+                        if (!match) continue;
+                        const [, cr, cg, cb] = match.map(Number);
+                        const ledIndices = keyIndices.flatMap(idx => definition.ledIndices[idx] ?? []);
+                        if (ledIndices.length > 0) await hid.setPerKeyColor(cr, cg, cb, ledIndices);
+                    }
+                    log.rgb('Per-key colors restored');
+                }
+            }
+            setSavedKeyColors(null);
             setPartialFlash(false);
             setTestPhase(null);
             return;
@@ -399,7 +419,6 @@ export function ColorPicker({ definition, selectedKeyIndices = [], onKeyColorCha
                 log.rgb('Fix: Full lighting reset...');
                 await handleResetLighting();
             }
-            setHasUnsavedChanges(false);
         } catch (err) {
             log.rgb(`Fix ERROR: ${err}`);
         } finally {
@@ -469,7 +488,6 @@ export function ColorPicker({ definition, selectedKeyIndices = [], onKeyColorCha
             setSpeed(defaults.speed);
             const [r, g, b2] = hsvToRgb(defaults.hue, defaults.saturation, 255);
             setColor({ r, g, b: b2 });
-            setHasUnsavedChanges(false);
         } catch (err) {
             log.rgb(`Reset ERROR: ${err}`);
         } finally {
@@ -493,6 +511,27 @@ export function ColorPicker({ definition, selectedKeyIndices = [], onKeyColorCha
         setLogEntries([]);
     };
 
+    const handleProbeFirmware = async () => {
+        if (probing) return;
+        setProbing(true);
+        setShowDiag(true);
+        log.rgb('═══ FIRMWARE PROTOCOL PROBE ═══');
+        log.rgb('Testing if firmware supports reading per-key LED colors...');
+        try {
+            const results = await hid.probeFirmwareProtocol();
+            for (const line of results) {
+                log.rgb(line);
+            }
+            log.rgb('═══ PROBE COMPLETE ═══');
+            log.rgb('Look for any response that is NOT "ff" (rejected) or "null" (timeout).');
+            log.rgb('If any command returns color data (e.g., ff 00 00 for red), we can use it for readback.');
+        } catch (err) {
+            log.rgb(`Probe ERROR: ${err}`);
+        } finally {
+            setProbing(false);
+        }
+    };
+
     const currentEffect = FRAMEWORK_RGB_EFFECTS.find(e => e.id === effectId);
 
     return (
@@ -503,15 +542,27 @@ export function ColorPicker({ definition, selectedKeyIndices = [], onKeyColorCha
                     "bg-surface border rounded-lg p-3",
                     isPerKeyMode ? "border-primary/40" : "border-border"
                 )}>
-                    <div className="text-xs font-semibold text-text-primary">
-                        {isPerKeyMode
-                            ? `Adjusting ${selectedKeyIndices.length} selected key${selectedKeyIndices.length > 1 ? 's' : ''}`
-                            : 'Adjusting all keys'}
+                    <div className="flex items-center justify-between">
+                        <div className="text-xs font-semibold text-text-primary">
+                            {isPerKeyMode
+                                ? `Adjusting ${selectedKeyIndices.length} selected key${selectedKeyIndices.length > 1 ? 's' : ''}`
+                                : 'Global backlight'}
+                        </div>
+                        {!isPerKeyMode && onSelectAll && (
+                            <button
+                                onClick={onSelectAll}
+                                className="px-2 py-0.5 rounded text-[10px] font-semibold bg-primary/10 text-primary hover:bg-primary/20 transition-colors border border-primary/20"
+                            >
+                                Select All Keys
+                            </button>
+                        )}
                     </div>
                     <div className="text-[10px] text-text-muted mt-0.5">
                         {isPerKeyMode
                             ? 'Click elsewhere to deselect and return to global mode'
-                            : 'Click keys on the keyboard to adjust individual colors'}
+                            : hasPerKeyColors
+                                ? 'Per-key colors override global backlight. Select keys to edit them.'
+                                : 'Click keys on the keyboard to adjust individual colors'}
                     </div>
                 </div>
             )}
@@ -692,96 +743,63 @@ export function ColorPicker({ definition, selectedKeyIndices = [], onKeyColorCha
                 </div>
             )}
 
-            {/* Save & Refresh buttons */}
-            <div className="flex gap-2">
+            {/* Tools (collapsible) */}
+            <div className="bg-surface border border-border rounded-lg overflow-hidden">
                 <button
-                    onClick={handleSave}
-                    disabled={saveState === 'saving'}
-                    className={clsx(
-                        "flex-1 py-2 rounded-lg font-bold text-xs tracking-wide flex items-center justify-center gap-2 transition-all",
-                        saveState === 'saved'
-                            ? 'bg-green-600 text-white'
-                            : saveState === 'error'
-                                ? 'bg-red-600 text-white'
-                                : 'bg-surface-highlight hover:bg-primary hover:text-white',
-                        saveState === 'saving' && 'opacity-50 cursor-wait'
-                    )}
+                    onClick={() => setShowTools(!showTools)}
+                    className="w-full px-3 py-2 flex items-center gap-2 text-[10px] text-text-muted hover:text-text-primary transition-colors"
                 >
-                    {saveState === 'saved' ? (
-                        <><CheckCircle2 size={14} /> Saved!</>
-                    ) : saveState === 'error' ? (
-                        <><Save size={14} /> Save Failed</>
-                    ) : saveState === 'saving' ? (
-                        <><Save size={14} /> Saving...</>
-                    ) : (
-                        <>
-                            {hasUnsavedChanges && <span className="w-2 h-2 rounded-full bg-yellow-400 animate-pulse" />}
-                            <Save size={14} /> Save to Device
-                        </>
-                    )}
+                    <Wrench size={12} />
+                    <span>Tools</span>
+                    <ChevronDown size={12} className={clsx("ml-auto transition-transform", showTools && "rotate-180")} />
                 </button>
-                <button
-                    onClick={async () => {
-                        await readDeviceState();
-                        // Also re-apply stored per-key colors to hardware
-                        if (hasPerKeyRGB && connectedProductId !== null && definition) {
-                            const stored = storageService.loadDeviceState(connectedProductId);
-                            if (stored?.perKeyColors && Object.keys(stored.perKeyColors).length > 0) {
-                                log.rgb('Re-applying stored per-key colors to device...');
-                                const enabled = await hid.enablePerKeyMode();
-                                if (enabled) {
-                                    const colorGroups: Record<string, number[]> = {};
-                                    for (const [keyIdx, color] of Object.entries(stored.perKeyColors)) {
-                                        if (!colorGroups[color]) colorGroups[color] = [];
-                                        colorGroups[color].push(Number(keyIdx));
-                                    }
-                                    for (const [colorStr, keyIndices] of Object.entries(colorGroups)) {
-                                        const match = colorStr.match(/rgb\((\d+),(\d+),(\d+)\)/);
-                                        if (!match) continue;
-                                        const [, cr, cg, cb] = match.map(Number);
-                                        const ledIndices = keyIndices.flatMap(idx => definition.ledIndices[idx] ?? []);
-                                        if (ledIndices.length > 0) await hid.setPerKeyColor(cr, cg, cb, ledIndices);
-                                    }
-                                    log.rgb('Per-key colors re-applied');
-                                }
-                            }
-                        }
-                    }}
-                    title="Refresh state from device and re-apply per-key colors"
-                    className="px-3 py-2 rounded-lg text-xs bg-surface-highlight hover:bg-primary hover:text-white transition-all"
-                >
-                    <RefreshCw size={14} />
-                </button>
-            </div>
-
-            {/* Test & Reset */}
-            <div className="flex gap-2">
-                <button
-                    onClick={handleTestLeds}
-                    disabled={testingLeds}
-                    className={clsx(
-                        "flex-1 py-2 rounded-lg font-bold text-xs tracking-wide flex items-center justify-center gap-2 transition-all",
-                        testingLeds
-                            ? "bg-yellow-500/20 text-yellow-400 cursor-wait"
-                            : "bg-surface-highlight hover:bg-yellow-500/20 hover:text-yellow-400"
-                    )}
-                >
-                    <Zap size={14} />
-                    {testingLeds ? 'Flashing...' : 'Test LEDs'}
-                </button>
-                <button
-                    onClick={handleResetLighting}
-                    disabled={resettingLeds}
-                    className={clsx(
-                        "flex-1 py-2 rounded-lg font-bold text-xs tracking-wide flex items-center justify-center gap-2 transition-all",
-                        resettingLeds
-                            ? "bg-orange-500/20 text-orange-400 cursor-wait"
-                            : "bg-surface-highlight hover:bg-orange-500/20 hover:text-orange-400"
-                    )}
-                >
-                    <RotateCcw size={14} />
-                    {resettingLeds ? 'Resetting...' : 'Reset Lights'}
-                </button>
+                {showTools && (
+                    <div className="px-3 pb-3 space-y-2">
+                        <div className="flex gap-2">
+                            <button
+                                onClick={handleTestLeds}
+                                disabled={testingLeds}
+                                className={clsx(
+                                    "flex-1 py-2 rounded-lg font-bold text-xs tracking-wide flex items-center justify-center gap-2 transition-all",
+                                    testingLeds
+                                        ? "bg-yellow-500/20 text-yellow-400 cursor-wait"
+                                        : "bg-surface-highlight hover:bg-yellow-500/20 hover:text-yellow-400"
+                                )}
+                            >
+                                <Zap size={14} />
+                                {testingLeds ? 'Flashing...' : 'Test LEDs'}
+                            </button>
+                            <button
+                                onClick={handleResetLighting}
+                                disabled={resettingLeds}
+                                className={clsx(
+                                    "flex-1 py-2 rounded-lg font-bold text-xs tracking-wide flex items-center justify-center gap-2 transition-all",
+                                    resettingLeds
+                                        ? "bg-orange-500/20 text-orange-400 cursor-wait"
+                                        : "bg-surface-highlight hover:bg-orange-500/20 hover:text-orange-400"
+                                )}
+                            >
+                                <RotateCcw size={14} />
+                                {resettingLeds ? 'Resetting...' : 'Reset Lights'}
+                            </button>
+                        </div>
+                        {hasPerKeyRGB && (
+                            <button
+                                onClick={handleProbeFirmware}
+                                disabled={probing}
+                                className={clsx(
+                                    "w-full py-2 rounded-lg font-bold text-xs tracking-wide flex items-center justify-center gap-2 transition-all",
+                                    probing
+                                        ? "bg-purple-500/20 text-purple-400 cursor-wait"
+                                        : "bg-surface-highlight hover:bg-purple-500/20 hover:text-purple-400"
+                                )}
+                            >
+                                <Search size={14} />
+                                {probing ? 'Probing...' : 'Probe Firmware'}
+                            </button>
+                        )}
+                    </div>
+                )}
             </div>
 
             {/* Post-test question */}

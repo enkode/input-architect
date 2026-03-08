@@ -463,6 +463,70 @@ export class HIDService {
         return this.setPerKeyColor(r, g, b, indices);
     }
 
+    // --- Firmware Protocol Probe (diagnostic) ---
+
+    /**
+     * Systematically probe the firmware for undocumented commands that might
+     * support reading per-key LED colors. Logs raw hex responses for analysis.
+     */
+    async probeFirmwareProtocol(): Promise<string[]> {
+        const results: string[] = [];
+
+        const hexDump = (data: DataView | null, bytes: number = 16): string => {
+            if (!data) return 'null (timeout)';
+            const parts = [];
+            for (let i = 0; i < Math.min(data.byteLength, bytes); i++) {
+                parts.push(data.getUint8(i).toString(16).padStart(2, '0'));
+            }
+            return parts.join(' ');
+        };
+
+        // Step 1: Confirm rgb_remote support (read-only query)
+        results.push('=== STEP 1: Confirm rgb_remote support ===');
+        const query = await this.sendCommand(RGB_REMOTE_CMD, [RGB_REMOTE_QUERY]);
+        results.push(`QUERY [fe 00] → ${hexDump(query)}`);
+        if (!query || query.getUint8(0) !== RGB_REMOTE_CMD) {
+            results.push('ABORT: Firmware does not support rgb_remote');
+            return results;
+        }
+
+        // Step 2: Probe undocumented rgb_remote sub-commands (read-only — no SET_LEDS)
+        results.push('=== STEP 2: Probe undocumented rgb_remote commands ===');
+        for (const cmd of [0x03, 0x04, 0x05, 0x06, 0x07, 0x08, 0x09, 0x0A, 0x0B, 0x0C, 0x0D, 0x0E, 0x0F, 0x11, 0x12, 0x13, 0x14, 0x15, 0x20]) {
+            const data = await this.sendCommand(RGB_REMOTE_CMD, [cmd]);
+            const hex = hexDump(data);
+            const rejected = data && data.byteLength > 0 && data.getUint8(0) === 0xFF;
+            results.push(`[fe ${cmd.toString(16).padStart(2, '0')}] → ${hex}${rejected ? ' (REJECTED)' : ''}`);
+        }
+
+        // Step 3: Try specific GET_LEDS patterns with LED index payload
+        results.push('=== STEP 3: Try GET_LEDS patterns ===');
+        const getA = await this.sendCommand(RGB_REMOTE_CMD, [0x11, 0]);
+        results.push(`Pattern A [fe 11 00] → ${hexDump(getA)}`);
+        const getB = await this.sendCommand(RGB_REMOTE_CMD, [0x11, 1, 0]);
+        results.push(`Pattern B [fe 11 01 00] → ${hexDump(getB)}`);
+        const getC = await this.sendCommand(RGB_REMOTE_CMD, [0x20, 0]);
+        results.push(`Pattern C [fe 20 00] → ${hexDump(getC)}`);
+
+        // Step 4: VIA Custom Channel GET (channel 0 = custom/per-key)
+        results.push('=== STEP 4: VIA Custom Channel GET (channel 0) ===');
+        for (const valueId of [0, 1, 2, 3, 4, 5, 6, 7, 8, 0x10, 0x11]) {
+            const data = await this.sendCommand(VIA_CUSTOM_GET_VALUE, [0x00, valueId]);
+            const hex = hexDump(data);
+            const rejected = data && data.byteLength > 0 && data.getUint8(0) === 0xFF;
+            results.push(`GET_VALUE ch=0 val=0x${valueId.toString(16).padStart(2, '0')} [08 00 ${valueId.toString(16).padStart(2, '0')}] → ${hex}${rejected ? ' (REJECTED)' : ''}`);
+        }
+
+        // Step 5: VIA RGB Matrix Channel GET (channel 3) for baseline comparison
+        results.push('=== STEP 5: VIA RGB Matrix GET (channel 3, baseline) ===');
+        for (const valueId of [1, 2, 3, 4]) {
+            const data = await this.sendCommand(VIA_CUSTOM_GET_VALUE, [CHANNEL_RGB_MATRIX, valueId]);
+            results.push(`GET_VALUE ch=3 val=${valueId} [08 03 0${valueId}] → ${hexDump(data)}`);
+        }
+
+        return results;
+    }
+
     // --- Protocol Version ---
 
     async getProtocolVersion(): Promise<number> {

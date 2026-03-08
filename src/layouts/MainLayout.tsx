@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useRef, useCallback } from 'react';
 import { PanelLeft, PanelRight } from 'lucide-react';
 import { clsx } from 'clsx';
 
@@ -11,15 +11,42 @@ interface MainLayoutProps {
 export function MainLayout({ children, sidebarLeft, sidebarRight }: MainLayoutProps) {
     const [leftOpen, setLeftOpen] = useState(true);
     const [rightOpen, setRightOpen] = useState(true);
+    const [leftWidth, setLeftWidth] = useState(320);
+    const [rightWidth, setRightWidth] = useState(384);
+    const dragging = useRef<'left' | 'right' | null>(null);
+
+    const handleMouseDown = useCallback((side: 'left' | 'right') => {
+        dragging.current = side;
+        document.body.style.cursor = 'col-resize';
+        document.body.style.userSelect = 'none';
+
+        const handleMouseMove = (e: MouseEvent) => {
+            if (dragging.current === 'left') {
+                setLeftWidth(Math.max(200, Math.min(500, e.clientX)));
+            } else if (dragging.current === 'right') {
+                setRightWidth(Math.max(280, Math.min(600, window.innerWidth - e.clientX)));
+            }
+        };
+        const handleMouseUp = () => {
+            dragging.current = null;
+            document.body.style.cursor = '';
+            document.body.style.userSelect = '';
+            document.removeEventListener('mousemove', handleMouseMove);
+            document.removeEventListener('mouseup', handleMouseUp);
+        };
+        document.addEventListener('mousemove', handleMouseMove);
+        document.addEventListener('mouseup', handleMouseUp);
+    }, []);
 
     return (
         <div className="flex h-screen w-screen overflow-hidden bg-background text-text-primary">
             {/* Left Sidebar */}
             <aside
                 className={clsx(
-                    "flex-shrink-0 border-r border-border bg-surface transition-all duration-300 ease-in-out relative flex flex-col",
-                    leftOpen ? "w-80 translate-x-0" : "w-12 -translate-x-0"
+                    "flex-shrink-0 border-r border-border bg-surface relative flex flex-col",
+                    !leftOpen && "!w-12"
                 )}
+                style={leftOpen ? { width: `${leftWidth}px` } : undefined}
             >
                 <div className="h-12 border-b border-border flex items-center justify-between px-3">
                     {leftOpen && <span className="text-xs font-bold tracking-widest text-text-muted uppercase">Modules</span>}
@@ -38,6 +65,14 @@ export function MainLayout({ children, sidebarLeft, sidebarRight }: MainLayoutPr
                 )}
             </aside>
 
+            {/* Left resize handle */}
+            {leftOpen && (
+                <div
+                    className="w-1 flex-shrink-0 cursor-col-resize hover:bg-primary/30 active:bg-primary/50 transition-colors"
+                    onMouseDown={() => handleMouseDown('left')}
+                />
+            )}
+
             {/* Main Stage */}
             <main className="flex-1 flex flex-col min-w-0 bg-background relative z-0">
                 <header className="h-12 border-b border-border bg-background/80 backdrop-blur flex items-center justify-between px-4 sticky top-0 z-10">
@@ -53,12 +88,21 @@ export function MainLayout({ children, sidebarLeft, sidebarRight }: MainLayoutPr
                 </div>
             </main>
 
+            {/* Right resize handle */}
+            {rightOpen && (
+                <div
+                    className="w-1 flex-shrink-0 cursor-col-resize hover:bg-primary/30 active:bg-primary/50 transition-colors"
+                    onMouseDown={() => handleMouseDown('right')}
+                />
+            )}
+
             {/* Right Sidebar */}
             <aside
                 className={clsx(
-                    "flex-shrink-0 border-l border-border bg-surface transition-all duration-300 ease-in-out flex flex-col",
-                    rightOpen ? "w-96 translate-x-0" : "w-12 translate-x-0"
+                    "flex-shrink-0 border-l border-border bg-surface flex flex-col",
+                    !rightOpen && "!w-12"
                 )}
+                style={rightOpen ? { width: `${rightWidth}px` } : undefined}
             >
                 <div className="h-12 border-b border-border flex items-center justify-between px-3">
                     <button onClick={() => setRightOpen(!rightOpen)} className="p-1 hover:text-primary transition-colors">

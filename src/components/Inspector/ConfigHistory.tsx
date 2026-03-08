@@ -5,7 +5,7 @@ import { log } from '../../services/Logger';
 import { useDevice } from '../../context/DeviceContext';
 import { FRAMEWORK_RGB_EFFECTS } from '../../data/definitions/framework16';
 import { hsvToRgb } from '../../utils/color';
-import { RotateCcw, Trash2, Download, Clock, ChevronDown, Save } from 'lucide-react';
+import { RotateCcw, Trash2, Download, Clock, ChevronDown, Save, Star, Pencil, Check, X } from 'lucide-react';
 import { clsx } from 'clsx';
 
 function formatTimestamp(ts: number): string {
@@ -22,19 +22,53 @@ function formatTimestamp(ts: number): string {
     return date.toLocaleDateString('en-US', { month: 'short', day: 'numeric' }) + ` ${time}`;
 }
 
-interface ConfigHistoryProps {
-    onPerKeyColorsRestore?: (colors: Record<number, string>) => void;
-    keyColors?: Record<number, string>;
+function SnapshotSummary({ snapshot }: { snapshot: ConfigSnapshot }) {
+    const effect = snapshot.rgbSettings
+        ? FRAMEWORK_RGB_EFFECTS.find(e => e.id === snapshot.rgbSettings?.effectId)
+        : null;
+    const [cr, cg, cb] = snapshot.rgbSettings
+        ? hsvToRgb(snapshot.rgbSettings.hue, snapshot.rgbSettings.saturation, 255)
+        : [0, 0, 0];
+    const brightnessPercent = snapshot.rgbSettings
+        ? Math.max(1, Math.round((snapshot.rgbSettings.brightness / 255) * 100))
+        : null;
+    const hasPerKey = snapshot.perKeyColors && Object.keys(snapshot.perKeyColors).length > 0;
+
+    if (!snapshot.rgbSettings && !hasPerKey) return null;
+
+    return (
+        <div className="flex items-center gap-2 text-[9px] text-text-muted font-mono">
+            {snapshot.rgbSettings && (
+                <div
+                    className="w-2.5 h-2.5 rounded-full flex-shrink-0 border border-white/10"
+                    style={{ backgroundColor: `rgb(${cr},${cg},${cb})` }}
+                />
+            )}
+            <span>
+                {brightnessPercent !== null && `${brightnessPercent}%`}
+                {effect ? ` ${effect.name}` : ''}
+                {hasPerKey ? ' + per-key' : ''}
+            </span>
+        </div>
+    );
 }
 
-export function ConfigHistory({ onPerKeyColorsRestore, keyColors }: ConfigHistoryProps) {
+interface ConfigHistoryProps {
+    onPerKeyColorsRestore?: (colors: Record<number, string>) => Promise<void> | void;
+    keyColors?: Record<number, string>;
+    onSelectAll?: () => void;
+}
+
+export function ConfigHistory({ onPerKeyColorsRestore, keyColors, onSelectAll }: ConfigHistoryProps) {
     const { connectedProductId } = useDevice();
     const [snapshots, setSnapshots] = useState<ConfigSnapshot[]>([]);
     const [restoringId, setRestoringId] = useState<string | null>(null);
-    const [expanded, setExpanded] = useState(true);
+    const [historyExpanded, setHistoryExpanded] = useState(false);
     const [savingName, setSavingName] = useState('');
     const [showSaveInput, setShowSaveInput] = useState(false);
     const [saving, setSaving] = useState(false);
+    const [renamingId, setRenamingId] = useState<string | null>(null);
+    const [renameValue, setRenameValue] = useState('');
 
     useEffect(() => {
         if (connectedProductId === null) return;
@@ -44,8 +78,8 @@ export function ConfigHistory({ onPerKeyColorsRestore, keyColors }: ConfigHistor
     const handleRestore = async (snapshot: ConfigSnapshot) => {
         if (restoringId || connectedProductId === null) return;
         setRestoringId(snapshot.id);
+        log.config(`Restoring snapshot: ${snapshot.label}`);
         try {
-            // Save a "before restore" snapshot so the user can undo
             const currentBrightness = await hid.getRGBBrightness();
             const currentEffect = await hid.getRGBEffect();
             const currentSpeed = await hid.getRGBEffectSpeed();
@@ -59,8 +93,12 @@ export function ConfigHistory({ onPerKeyColorsRestore, keyColors }: ConfigHistor
                 perKeyColors: keyColors && Object.keys(keyColors).length > 0 ? keyColors : undefined,
             });
 
+            const hasPerKey = snapshot.perKeyColors && Object.keys(snapshot.perKeyColors).length > 0;
+
+            // VIA settings FIRST — so setRGBEffect/brightness don't reset per-key mode
             if (snapshot.rgbSettings) {
                 const { brightness, effectId, speed, hue, saturation } = snapshot.rgbSettings;
+                log.config(`Restoring VIA settings: brightness=${brightness}, effect=${effectId}, speed=${speed}, H=${hue}, S=${saturation}`);
                 await hid.setRGBBrightness(brightness);
                 await hid.setRGBEffect(effectId);
                 await hid.setRGBEffectSpeed(speed);
@@ -69,12 +107,20 @@ export function ConfigHistory({ onPerKeyColorsRestore, keyColors }: ConfigHistor
                 storageService.saveDeviceState(connectedProductId, {
                     rgbSettings: snapshot.rgbSettings,
                 });
-            }
-            if (snapshot.perKeyColors && onPerKeyColorsRestore) {
-                onPerKeyColorsRestore(snapshot.perKeyColors);
+                log.config('VIA settings restored and saved');
             }
 
-            // Refresh the snapshot list to show the new "before restore" entry
+            // Per-key colors LAST — so they aren't overridden by VIA commands above
+            if (hasPerKey && onPerKeyColorsRestore) {
+                log.config(`Restoring ${Object.keys(snapshot.perKeyColors!).length} per-key colors...`);
+                await onPerKeyColorsRestore(snapshot.perKeyColors!);
+                // Auto-select all keys so the per-key brightness slider is visible
+                onSelectAll?.();
+            } else if (onPerKeyColorsRestore) {
+                log.config('No per-key colors in snapshot — clearing per-key mode');
+                await onPerKeyColorsRestore({});
+            }
+
             setSnapshots(storageService.loadSnapshots(connectedProductId));
         } catch (err) {
             log.errorConfig(`Restore failed: ${err}`);
@@ -111,7 +157,21 @@ export function ConfigHistory({ onPerKeyColorsRestore, keyColors }: ConfigHistor
                 ? { brightness, effectId, speed, hue: color[0], saturation: color[1] }
                 : undefined;
             const perKeyColors = keyColors && Object.keys(keyColors).length > 0 ? keyColors : undefined;
-            const label = savingName.trim() || 'Manual save';
+            const label = savingName.trim() || 'Untitled';
+
+            // Persist to EEPROM so settings survive power cycles
+            if (rgbSettings) {
+                await hid.saveRGBSettings(rgbSettings);
+                log.config('Settings saved to device EEPROM');
+            }
+
+            // Update localStorage device state for auto-restore on reconnect
+            storageService.saveDeviceState(connectedProductId, {
+                rgbSettings,
+                perKeyColors,
+            });
+
+            // Create named snapshot for history
             storageService.saveSnapshot(connectedProductId, {
                 label: `Manual: ${label}`,
                 rgbSettings,
@@ -121,149 +181,226 @@ export function ConfigHistory({ onPerKeyColorsRestore, keyColors }: ConfigHistor
             setSavingName('');
             setShowSaveInput(false);
         } catch (err) {
-            log.errorConfig(`Manual save failed: ${err}`);
+            log.errorConfig(`Save failed: ${err}`);
         } finally {
             setSaving(false);
         }
     };
 
-    const reversed = [...snapshots].reverse();
+    const handleRename = (snapshotId: string) => {
+        const newLabel = renameValue.trim();
+        if (!newLabel || connectedProductId === null) {
+            setRenamingId(null);
+            return;
+        }
+        storageService.renameSnapshot(connectedProductId, snapshotId, `Manual: ${newLabel}`);
+        setSnapshots(storageService.loadSnapshots(connectedProductId));
+        setRenamingId(null);
+        setRenameValue('');
+    };
+
+    // Split into manual saves vs auto-history
+    const manualSaves = [...snapshots].filter(s => s.label.startsWith('Manual:')).reverse();
+    const autoHistory = [...snapshots].filter(s => !s.label.startsWith('Manual:')).reverse();
+
+    const displayLabel = (label: string) => label.startsWith('Manual: ') ? label.slice(8) : label;
 
     return (
-        <div className="bg-surface border border-border p-4 rounded-lg space-y-3">
-            <button
-                onClick={() => setExpanded(!expanded)}
-                className="w-full flex items-center justify-between"
-            >
-                <h3 className="text-sm font-semibold flex items-center gap-2">
-                    <Clock size={16} />
-                    Config History
-                </h3>
-                <ChevronDown size={14} className={clsx("text-text-muted transition-transform", expanded && "rotate-180")} />
-            </button>
+        <div className="space-y-3">
+            {/* === SAVED CONFIGS — prominent box === */}
+            <div className="bg-surface border-2 border-primary/20 p-4 rounded-lg space-y-3">
+                <div className="flex items-center justify-between">
+                    <h3 className="text-sm font-semibold flex items-center gap-2 text-primary">
+                        <Star size={16} />
+                        Saved Configs
+                    </h3>
+                    <span className="text-[9px] text-text-muted">{manualSaves.length} saved</span>
+                </div>
 
-            {expanded && (
-                <>
-                    <p className="text-[10px] text-text-muted">
-                        Automatic snapshots of your lighting settings. Restore any previous configuration.
-                    </p>
+                <p className="text-[10px] text-text-muted">
+                    Save and restore your favorite lighting configurations.
+                </p>
 
-                    {/* Manual save */}
-                    {showSaveInput ? (
-                        <div className="flex gap-1.5">
-                            <input
-                                type="text"
-                                placeholder="Snapshot name..."
-                                value={savingName}
-                                onChange={(e) => setSavingName(e.target.value)}
-                                onKeyDown={(e) => e.key === 'Enter' && handleManualSave()}
-                                className="flex-1 px-2 py-1.5 rounded-md text-[10px] bg-surface-highlight border border-border text-text-primary placeholder:text-text-muted/50 outline-none focus:border-primary"
-                                autoFocus
-                            />
-                            <button
-                                onClick={handleManualSave}
-                                disabled={saving}
-                                className={clsx(
-                                    "px-3 py-1.5 rounded-md text-[10px] font-semibold flex items-center gap-1 transition-colors",
-                                    saving ? "bg-primary/20 text-primary cursor-wait" : "bg-primary/10 text-primary hover:bg-primary/20"
-                                )}
-                            >
-                                <Save size={10} />
-                                {saving ? '...' : 'Save'}
-                            </button>
-                            <button
-                                onClick={() => { setShowSaveInput(false); setSavingName(''); }}
-                                className="px-2 py-1.5 rounded-md text-[10px] text-text-muted hover:text-text-primary transition-colors"
-                            >
-                                Cancel
-                            </button>
-                        </div>
-                    ) : (
+                {/* Save button / input */}
+                {showSaveInput ? (
+                    <div className="flex gap-1.5">
+                        <input
+                            type="text"
+                            placeholder="Config name..."
+                            value={savingName}
+                            onChange={(e) => setSavingName(e.target.value)}
+                            onKeyDown={(e) => e.key === 'Enter' && handleManualSave()}
+                            className="flex-1 px-2 py-1.5 rounded-md text-[10px] bg-surface-highlight border border-border text-text-primary placeholder:text-text-muted/50 outline-none focus:border-primary"
+                            autoFocus
+                        />
                         <button
-                            onClick={() => setShowSaveInput(true)}
-                            className="w-full py-1.5 rounded-md text-[10px] font-semibold flex items-center justify-center gap-1 bg-surface-highlight hover:bg-primary/10 hover:text-primary text-text-muted transition-colors"
+                            onClick={handleManualSave}
+                            disabled={saving}
+                            className={clsx(
+                                "px-3 py-1.5 rounded-md text-[10px] font-semibold flex items-center gap-1 transition-colors",
+                                saving ? "bg-primary/20 text-primary cursor-wait" : "bg-primary text-white hover:bg-primary/90"
+                            )}
                         >
                             <Save size={10} />
-                            Save Current Config
+                            {saving ? '...' : 'Save'}
                         </button>
-                    )}
+                        <button
+                            onClick={() => { setShowSaveInput(false); setSavingName(''); }}
+                            className="px-2 py-1.5 rounded-md text-[10px] text-text-muted hover:text-text-primary transition-colors"
+                        >
+                            Cancel
+                        </button>
+                    </div>
+                ) : (
+                    <button
+                        onClick={() => setShowSaveInput(true)}
+                        className="w-full py-2 rounded-md text-[10px] font-semibold flex items-center justify-center gap-1.5 bg-primary/10 text-primary hover:bg-primary/20 transition-colors border border-primary/20"
+                    >
+                        <Save size={12} />
+                        Save Current Config
+                    </button>
+                )}
 
-                    {reversed.length === 0 ? (
-                        <div className="text-[10px] text-text-muted/50 italic py-4 text-center">
-                            No snapshots yet. Save settings to create your first snapshot.
-                        </div>
-                    ) : (
-                        <div className="space-y-1.5 max-h-64 overflow-auto">
-                            {reversed.map(snapshot => {
-                                const effect = snapshot.rgbSettings
-                                    ? FRAMEWORK_RGB_EFFECTS.find(e => e.id === snapshot.rgbSettings?.effectId)
-                                    : null;
-                                const [cr, cg, cb] = snapshot.rgbSettings
-                                    ? hsvToRgb(snapshot.rgbSettings.hue, snapshot.rgbSettings.saturation, 255)
-                                    : [0, 0, 0];
-                                const brightnessPercent = snapshot.rgbSettings
-                                    ? Math.max(1, Math.round((snapshot.rgbSettings.brightness / 255) * 100))
-                                    : null;
+                {/* Saved configs list */}
+                {manualSaves.length === 0 ? (
+                    <div className="text-[10px] text-text-muted/50 italic py-3 text-center">
+                        No saved configs yet. Save your current settings above.
+                    </div>
+                ) : (
+                    <div className="space-y-1.5 max-h-48 overflow-auto">
+                        {manualSaves.map(snapshot => {
+                            const isRestoring = restoringId === snapshot.id;
+                            const isRenaming = renamingId === snapshot.id;
+
+                            return (
+                                <div
+                                    key={snapshot.id}
+                                    className="bg-surface-highlight/50 border border-primary/10 rounded-md p-2.5 space-y-1.5"
+                                >
+                                    <div className="flex items-center justify-between">
+                                        {isRenaming ? (
+                                            <div className="flex items-center gap-1 flex-1 min-w-0">
+                                                <input
+                                                    type="text"
+                                                    value={renameValue}
+                                                    onChange={(e) => setRenameValue(e.target.value)}
+                                                    onKeyDown={(e) => {
+                                                        if (e.key === 'Enter') handleRename(snapshot.id);
+                                                        if (e.key === 'Escape') { setRenamingId(null); setRenameValue(''); }
+                                                    }}
+                                                    className="flex-1 px-1.5 py-0.5 rounded text-[10px] bg-surface border border-primary/50 text-text-primary outline-none"
+                                                    autoFocus
+                                                />
+                                                <button onClick={() => handleRename(snapshot.id)} className="p-0.5 text-green-400 hover:text-green-300"><Check size={10} /></button>
+                                                <button onClick={() => { setRenamingId(null); setRenameValue(''); }} className="p-0.5 text-text-muted hover:text-text-primary"><X size={10} /></button>
+                                            </div>
+                                        ) : (
+                                            <div className="flex items-center gap-2 min-w-0 flex-1">
+                                                <span className="text-[10px] text-text-primary font-semibold truncate">
+                                                    {displayLabel(snapshot.label)}
+                                                </span>
+                                                <button
+                                                    onClick={() => { setRenamingId(snapshot.id); setRenameValue(displayLabel(snapshot.label)); }}
+                                                    className="p-0.5 text-text-muted/40 hover:text-text-primary transition-colors flex-shrink-0"
+                                                    title="Rename"
+                                                >
+                                                    <Pencil size={9} />
+                                                </button>
+                                            </div>
+                                        )}
+                                        <span className="text-[9px] text-text-muted/60 flex-shrink-0 ml-2">
+                                            {formatTimestamp(snapshot.timestamp)}
+                                        </span>
+                                    </div>
+
+                                    <SnapshotSummary snapshot={snapshot} />
+
+                                    <div className="flex gap-1">
+                                        <button
+                                            onClick={() => handleRestore(snapshot)}
+                                            disabled={isRestoring || restoringId !== null}
+                                            className={clsx(
+                                                "flex-1 py-1.5 rounded text-[10px] font-semibold flex items-center justify-center gap-1 transition-colors",
+                                                isRestoring
+                                                    ? "bg-primary/20 text-primary cursor-wait"
+                                                    : "bg-primary/10 text-primary hover:bg-primary/20"
+                                            )}
+                                        >
+                                            <RotateCcw size={10} className={clsx(isRestoring && "animate-spin")} />
+                                            {isRestoring ? 'Restoring...' : 'Restore'}
+                                        </button>
+                                        <button
+                                            onClick={() => handleExport(snapshot)}
+                                            title="Export as JSON"
+                                            className="px-2 py-1 rounded text-[10px] text-text-muted hover:text-primary transition-colors bg-surface-highlight/50"
+                                        >
+                                            <Download size={10} />
+                                        </button>
+                                        <button
+                                            onClick={() => handleDelete(snapshot.id)}
+                                            title="Delete"
+                                            className="px-2 py-1 rounded text-[10px] text-text-muted hover:text-red-400 transition-colors bg-surface-highlight/50"
+                                        >
+                                            <Trash2 size={10} />
+                                        </button>
+                                    </div>
+                                </div>
+                            );
+                        })}
+                    </div>
+                )}
+            </div>
+
+            {/* === AUTO HISTORY — collapsible === */}
+            {autoHistory.length > 0 && (
+                <div className="bg-surface border border-border rounded-lg overflow-hidden">
+                    <button
+                        onClick={() => setHistoryExpanded(!historyExpanded)}
+                        className="w-full p-3 flex items-center justify-between"
+                    >
+                        <h3 className="text-[10px] font-semibold flex items-center gap-2 text-text-muted uppercase tracking-wider">
+                            <Clock size={12} />
+                            Auto History ({autoHistory.length})
+                        </h3>
+                        <ChevronDown size={12} className={clsx("text-text-muted transition-transform", historyExpanded && "rotate-180")} />
+                    </button>
+
+                    {historyExpanded && (
+                        <div className="px-3 pb-3 space-y-1.5 max-h-48 overflow-auto">
+                            {autoHistory.map(snapshot => {
                                 const isRestoring = restoringId === snapshot.id;
-                                const hasPerKey = snapshot.perKeyColors && Object.keys(snapshot.perKeyColors).length > 0;
-
                                 return (
                                     <div
                                         key={snapshot.id}
-                                        className="bg-surface-highlight/50 border border-border/50 rounded-md p-2 space-y-1.5"
+                                        className="bg-surface-highlight/30 border border-border/30 rounded-md p-2 space-y-1"
                                     >
                                         <div className="flex items-center justify-between">
-                                            <div className="flex items-center gap-2 min-w-0">
-                                                {snapshot.rgbSettings && (
-                                                    <div
-                                                        className="w-3 h-3 rounded-full flex-shrink-0 border border-white/10"
-                                                        style={{ backgroundColor: `rgb(${cr},${cg},${cb})` }}
-                                                    />
-                                                )}
-                                                <span className="text-[10px] text-text-primary truncate">
-                                                    {snapshot.label}
-                                                </span>
-                                            </div>
-                                            <span className="text-[9px] text-text-muted/60 flex-shrink-0 ml-2">
+                                            <span className="text-[10px] text-text-muted truncate">{snapshot.label}</span>
+                                            <span className="text-[9px] text-text-muted/40 flex-shrink-0 ml-2">
                                                 {formatTimestamp(snapshot.timestamp)}
                                             </span>
                                         </div>
-
-                                        {snapshot.rgbSettings && (
-                                            <div className="text-[9px] text-text-muted font-mono">
-                                                {brightnessPercent}% brightness
-                                                {effect ? ` / ${effect.name}` : ''}
-                                                {hasPerKey ? ' + per-key colors' : ''}
-                                            </div>
-                                        )}
-
+                                        <SnapshotSummary snapshot={snapshot} />
                                         <div className="flex gap-1">
                                             <button
                                                 onClick={() => handleRestore(snapshot)}
                                                 disabled={isRestoring || restoringId !== null}
                                                 className={clsx(
-                                                    "flex-1 py-1 rounded text-[10px] font-semibold flex items-center justify-center gap-1 transition-colors",
+                                                    "flex-1 py-1 rounded text-[9px] font-semibold flex items-center justify-center gap-1 transition-colors",
                                                     isRestoring
                                                         ? "bg-primary/20 text-primary cursor-wait"
-                                                        : "bg-primary/10 text-primary hover:bg-primary/20"
+                                                        : "bg-surface-highlight text-text-muted hover:text-primary hover:bg-primary/10"
                                                 )}
                                             >
-                                                <RotateCcw size={10} className={clsx(isRestoring && "animate-spin")} />
+                                                <RotateCcw size={8} className={clsx(isRestoring && "animate-spin")} />
                                                 {isRestoring ? 'Restoring...' : 'Restore'}
                                             </button>
                                             <button
-                                                onClick={() => handleExport(snapshot)}
-                                                title="Export as JSON"
-                                                className="px-2 py-1 rounded text-[10px] text-text-muted hover:text-primary transition-colors bg-surface-highlight/50"
-                                            >
-                                                <Download size={10} />
-                                            </button>
-                                            <button
                                                 onClick={() => handleDelete(snapshot.id)}
-                                                title="Delete snapshot"
-                                                className="px-2 py-1 rounded text-[10px] text-text-muted hover:text-red-400 transition-colors bg-surface-highlight/50"
+                                                title="Delete"
+                                                className="px-1.5 py-1 rounded text-[9px] text-text-muted/40 hover:text-red-400 transition-colors"
                                             >
-                                                <Trash2 size={10} />
+                                                <Trash2 size={8} />
                                             </button>
                                         </div>
                                     </div>
@@ -271,7 +408,7 @@ export function ConfigHistory({ onPerKeyColorsRestore, keyColors }: ConfigHistor
                             })}
                         </div>
                     )}
-                </>
+                </div>
             )}
         </div>
     );
