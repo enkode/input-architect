@@ -75,7 +75,7 @@ Open **http://localhost:5173** in Chrome 89+ or Edge 89+ (WebHID required).
 ### Key Mapping
 - **Full key remapping** via the [VIA protocol](https://www.caniusevia.com/) (V2 and V3)
 - **6 programmable layers** — base layer plus 5 custom layers
-- **Layer switching keycodes** — MO (momentary), TG (toggle), TO (turn on), OSL (one-shot), TT (tap-toggle), DF (default layer), and LT (layer-tap) for full layer control
+- **Layer switching** — click "Map" next to any layer in the Layer Selector, pick a type (MO hold, TG toggle, TO switch), then click the key you want to assign it to. Also available as keycodes in the Mapping tab's Layers category for advanced use.
 - **100+ QMK keycodes** organized by category (Basic, Function, Navigation, Modifiers, Media, Layers)
 - **Modifier combinations** — Ctrl+Key, Shift+Key, Alt+Key, and more
 - **Live readback** — see what's programmed on each key in real time
@@ -189,6 +189,14 @@ npm run tauri:build
 3. Choose a new keycode from the inspector panel on the right
 4. Click **Apply** — the change is written to the device immediately
 5. Use the **Layer Selector** at the bottom-left to switch between layers (0-5)
+
+### Mapping Layer Switches
+
+1. Open the **Layer Selector** dropdown (bottom-left, Mapping tab)
+2. Click **Map** next to the layer you want a key to switch to
+3. Pick the switch type: **MO** (hold to activate), **TG** (toggle on/off), or **TO** (switch and stay)
+4. Click the key on the virtual keyboard — the layer keycode is assigned immediately
+5. Press **Escape** or click **Cancel** to exit without mapping
 
 ### Controlling RGB Lighting
 

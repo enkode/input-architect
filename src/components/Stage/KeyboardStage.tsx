@@ -1,6 +1,6 @@
 import { useRef, useState } from 'react';
 import { clsx } from 'clsx';
-import { Plus, X, XCircle } from 'lucide-react';
+import { Crosshair, Plus, X, XCircle } from 'lucide-react';
 import { VirtualKeyboard } from './VirtualKeyboard';
 
 import type { VIAKeyboardDefinition } from '../../types/via';
@@ -23,9 +23,11 @@ interface KeyboardStageProps {
     onSavePreset?: (label: string, indices: number[]) => void;
     onDeletePreset?: (presetId: string) => void;
     selectedCount?: number;
+    layerMappingLabel?: string;
+    onCancelLayerMapping?: () => void;
 }
 
-export function KeyboardStage({ definition, pressedKeys, selectedKeyIndices, onKeySelect, onDeselectAll, deviceKeymap, keyColors, shiftHoverPreviewIndices, onKeyHover, activeMode, presets, customPresetIds, onPresetSelect, onSavePreset, onDeletePreset, selectedCount = 0 }: KeyboardStageProps) {
+export function KeyboardStage({ definition, pressedKeys, selectedKeyIndices, onKeySelect, onDeselectAll, deviceKeymap, keyColors, shiftHoverPreviewIndices, onKeyHover, activeMode, presets, customPresetIds, onPresetSelect, onSavePreset, onDeletePreset, selectedCount = 0, layerMappingLabel, onCancelLayerMapping }: KeyboardStageProps) {
     const containerRef = useRef<HTMLDivElement>(null);
     const [naming, setNaming] = useState(false);
     const [presetName, setPresetName] = useState('');
@@ -61,6 +63,24 @@ export function KeyboardStage({ definition, pressedKeys, selectedKeyIndices, onK
                     <p className="text-xs text-text-muted uppercase tracking-widest">VIA Device</p>
                 </div>
             </div>
+
+            {/* Layer mapping banner */}
+            {layerMappingLabel && (
+                <div className="flex-shrink-0 mx-4 py-2 px-4 rounded-lg bg-primary/10 border border-primary/30 flex items-center justify-between">
+                    <div className="flex items-center gap-2">
+                        <Crosshair size={14} className="text-primary animate-pulse" />
+                        <span className="text-xs font-semibold text-primary">
+                            Click a key to assign <span className="font-bold">{layerMappingLabel}</span>
+                        </span>
+                    </div>
+                    <button
+                        onClick={() => onCancelLayerMapping?.()}
+                        className="text-[10px] text-text-muted hover:text-red-400 transition-colors px-2 py-0.5 rounded"
+                    >
+                        Cancel
+                    </button>
+                </div>
+            )}
 
             {/* Keyboard — fills remaining space */}
             <div className="flex-1 min-h-0 flex items-center justify-center p-4">

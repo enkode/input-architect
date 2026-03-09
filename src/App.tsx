@@ -5,7 +5,7 @@ import { PropertyPanel } from './components/Inspector/PropertyPanel';
 import { FirmwarePanel } from './components/Firmware/FirmwarePanel';
 import { FirmwareStage } from './components/Firmware/FirmwareStage';
 import { HelpPanel } from './components/Sidebar/HelpPanel';
-import { LayerSelector } from './components/Sidebar/LayerSelector';
+import { LayerSelector, type LayerSwitchType } from './components/Sidebar/LayerSelector';
 import { NavigationMenu, type AppMode } from './components/Sidebar/NavigationMenu';
 import { FRAMEWORK_16_ANSI } from './data/definitions/framework16';
 import { FRAMEWORK_MACROPAD } from './data/definitions/macropad';
@@ -51,6 +51,12 @@ function App() {
   const [anchorKeyIndex, setAnchorKeyIndex] = useState<number | null>(null);
   const [hoveredKeyIndex, setHoveredKeyIndex] = useState<number | null>(null);
 
+  // Layer mapping mode (pick-a-key flow from LayerSelector)
+  const [layerMapping, setLayerMapping] = useState<{
+    targetLayer: number;
+    type: LayerSwitchType;
+  } | null>(null);
+
   // Health check
   const [healthResult, setHealthResult] = useState<HealthCheckResult | null>(null);
   const [healthChecking, setHealthChecking] = useState(false);
@@ -70,6 +76,7 @@ function App() {
 
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') setLayerMapping(null);
       if (e.key === 'Shift') setIsShiftHeld(true);
       if (!e.repeat) setPressedKeys(prev => [...prev, e.code]);
     };
@@ -255,7 +262,23 @@ function App() {
     }
   };
 
-  const handleKeySelect = (index: number, modifiers: { ctrl: boolean; shift: boolean }) => {
+  const handleKeySelect = async (index: number, modifiers: { ctrl: boolean; shift: boolean }) => {
+    // Layer mapping mode: write keycode immediately and exit
+    if (layerMapping && activeDefinition) {
+      const { targetLayer, type } = layerMapping;
+      const keycodeBase = type === 'MO' ? 0x5220 : type === 'TG' ? 0x5260 : 0x5200;
+      const keycode = keycodeBase + targetLayer;
+      const pos = activeDefinition.matrixPositions[index];
+      if (pos) {
+        const [row, col] = pos;
+        log.hid(`Layer map: ${type}(${targetLayer}) -> Key ${index} [Row ${row}, Col ${col}] on Layer ${selectedLayer}`);
+        await hid.setKeycode(selectedLayer, row, col, keycode);
+        refreshKeymap();
+      }
+      setLayerMapping(null);
+      return;
+    }
+
     if (modifiers.shift && anchorKeyIndex !== null && activeDefinition) {
       // Shift-click: select range on same row (additive)
       const keys = parseKeyPositions(activeDefinition);
@@ -444,7 +467,12 @@ function App() {
               <NavigationMenu activeMode={activeMode} onModeSelect={setActiveMode} />
               <div className="flex-1" />
               {activeMode === 'mapping' && (
-                <LayerSelector selectedLayer={selectedLayer} onLayerSelect={setSelectedLayer} />
+                <LayerSelector
+                  selectedLayer={selectedLayer}
+                  onLayerSelect={setSelectedLayer}
+                  onMapLayer={(targetLayer, type) => setLayerMapping({ targetLayer, type })}
+                  isMappingActive={layerMapping !== null}
+                />
               )}
             </>
           )}
@@ -507,6 +535,8 @@ function App() {
           onPresetSelect={handlePresetSelect}
           onSavePreset={handleSaveCustomPreset}
           onDeletePreset={handleDeleteCustomPreset}
+          layerMappingLabel={layerMapping ? `${layerMapping.type}(${layerMapping.targetLayer})` : undefined}
+          onCancelLayerMapping={() => setLayerMapping(null)}
         />
       ) : (
         <div className="w-full h-full flex flex-col items-center justify-center gap-6 text-center">
