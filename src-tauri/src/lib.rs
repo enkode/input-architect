@@ -6,6 +6,7 @@ pub fn run() {
         .level(log::LevelFilter::Info)
         .build(),
     )
+    .plugin(tauri_plugin_store::Builder::default().build())
     .run(tauri::generate_context!())
     .expect("error while running tauri application");
 }

@@ -60,6 +60,9 @@ function App() {
   const saveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const perKeyRestoredRef = useRef(false);
 
+  // Initialize persistent storage (hydrates localStorage from Tauri store on reinstall)
+  useEffect(() => { storageService.init(); }, []);
+
   // Clean up save timer on unmount
   useEffect(() => {
     return () => { if (saveTimerRef.current) clearTimeout(saveTimerRef.current); };

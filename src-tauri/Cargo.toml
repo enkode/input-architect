@@ -1,6 +1,6 @@
 [package]
 name = "input-architect"
-version = "0.14.0"
+version = "0.14.1"
 description = "Framework Laptop 16 Keyboard & Macropad Configurator"
 authors = ["enkode"]
 license = "MIT"
@@ -21,3 +21,4 @@ serde = { version = "1.0", features = ["derive"] }
 log = "0.4"
 tauri = { version = "2.10.0", features = [] }
 tauri-plugin-log = "2"
+tauri-plugin-store = "2.4.2"
