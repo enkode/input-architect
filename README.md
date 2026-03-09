@@ -75,7 +75,8 @@ Open **http://localhost:5173** in Chrome 89+ or Edge 89+ (WebHID required).
 ### Key Mapping
 - **Full key remapping** via the [VIA protocol](https://www.caniusevia.com/) (V2 and V3)
 - **6 programmable layers** — base layer plus 5 custom layers
-- **100+ QMK keycodes** organized by category (Basic, Function, Navigation, Modifiers, Media)
+- **Layer switching keycodes** — MO (momentary), TG (toggle), TO (turn on), OSL (one-shot), TT (tap-toggle), DF (default layer), and LT (layer-tap) for full layer control
+- **100+ QMK keycodes** organized by category (Basic, Function, Navigation, Modifiers, Media, Layers)
 - **Modifier combinations** — Ctrl+Key, Shift+Key, Alt+Key, and more
 - **Live readback** — see what's programmed on each key in real time
 
@@ -274,7 +275,11 @@ qmk compile -kb framework/macropad -km default   # For RGB macropad
 
 ### Safety
 
-The Framework 16 keyboard and macropad use the **RP2040** microcontroller with a **permanent, immutable UF2 bootloader**. It is impossible to brick the device — if anything goes wrong, simply re-enter bootloader mode and flash again. Always have an external keyboard handy during flashing.
+The Framework 16 keyboard and macropad use the **RP2040** microcontroller. The RP2040's first-stage bootloader is **burned into mask ROM** at the factory — it cannot be modified by any software. If a flash fails or produces corrupted firmware, the ROM bootloader detects the invalid checksum and automatically falls back to USB boot mode (the device appears as an `RPI-RP2` drive).
+
+Additionally, Framework's two-key bootloader combo (both Alt keys on keyboard, keys 2+6 on macropad) is **hardware-level** — a circuit on the PCB pulls the flash chip-select line low during power-up, bypassing firmware entirely. This means recovery works even with completely corrupted firmware.
+
+**Practical risk is extremely low.** Always have an external keyboard handy during flashing, and don't disconnect the module mid-flash.
 
 ---
 
@@ -374,6 +379,10 @@ This project stands on the shoulders of several amazing open-source projects and
 
 ### nucleardog
 - [nucleardog/qmk_firmware_fw16](https://gitlab.com/nucleardog/qmk_firmware_fw16) — Custom QMK firmware fork that adds per-key RGB control via the `rgb_remote` protocol. This is what makes per-key RGB possible in Input Architect.
+
+### Community Testers
+- **MJ1** — Detailed feedback on Linux builds, bricking risk accuracy, and QMK layer documentation
+- **Per_Magnus_Tveten** — First tester to verify macropad functionality, identified layer switching as a needed feature
 
 ### QMK
 - [QMK Firmware](https://github.com/qmk/qmk_firmware) — The open-source keyboard firmware that powers Framework input modules

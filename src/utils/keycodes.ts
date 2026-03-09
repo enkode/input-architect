@@ -121,7 +121,74 @@ export const KEYCODE_MAP: Record<number, string> = {
     0x00E4: "RCtrl",
     0x00E5: "RShift",
     0x00E6: "RAlt",
-    0x00E7: "RWin"
+    0x00E7: "RWin",
+    // Layer switching keycodes (QMK VIA V3 protocol)
+    // TO(layer) — Turn On: switch to layer, deactivate all others
+    0x5200: "TO(0)",
+    0x5201: "TO(1)",
+    0x5202: "TO(2)",
+    0x5203: "TO(3)",
+    0x5204: "TO(4)",
+    0x5205: "TO(5)",
+    0x5206: "TO(6)",
+    0x5207: "TO(7)",
+    0x5208: "TO(8)",
+    0x5209: "TO(9)",
+    // MO(layer) — Momentary: active while key is held
+    0x5220: "MO(0)",
+    0x5221: "MO(1)",
+    0x5222: "MO(2)",
+    0x5223: "MO(3)",
+    0x5224: "MO(4)",
+    0x5225: "MO(5)",
+    0x5226: "MO(6)",
+    0x5227: "MO(7)",
+    0x5228: "MO(8)",
+    0x5229: "MO(9)",
+    // DF(layer) — Default Layer: change the base layer
+    0x5240: "DF(0)",
+    0x5241: "DF(1)",
+    0x5242: "DF(2)",
+    0x5243: "DF(3)",
+    0x5244: "DF(4)",
+    0x5245: "DF(5)",
+    0x5246: "DF(6)",
+    0x5247: "DF(7)",
+    0x5248: "DF(8)",
+    0x5249: "DF(9)",
+    // TG(layer) — Toggle: press once to activate, again to deactivate
+    0x5260: "TG(0)",
+    0x5261: "TG(1)",
+    0x5262: "TG(2)",
+    0x5263: "TG(3)",
+    0x5264: "TG(4)",
+    0x5265: "TG(5)",
+    0x5266: "TG(6)",
+    0x5267: "TG(7)",
+    0x5268: "TG(8)",
+    0x5269: "TG(9)",
+    // OSL(layer) — One-Shot Layer: active for one keypress then returns
+    0x5280: "OSL(0)",
+    0x5281: "OSL(1)",
+    0x5282: "OSL(2)",
+    0x5283: "OSL(3)",
+    0x5284: "OSL(4)",
+    0x5285: "OSL(5)",
+    0x5286: "OSL(6)",
+    0x5287: "OSL(7)",
+    0x5288: "OSL(8)",
+    0x5289: "OSL(9)",
+    // TT(layer) — Tap-Toggle: hold = momentary, multi-tap = toggle
+    0x52C0: "TT(0)",
+    0x52C1: "TT(1)",
+    0x52C2: "TT(2)",
+    0x52C3: "TT(3)",
+    0x52C4: "TT(4)",
+    0x52C5: "TT(5)",
+    0x52C6: "TT(6)",
+    0x52C7: "TT(7)",
+    0x52C8: "TT(8)",
+    0x52C9: "TT(9)",
 };
 
 /** Organized key categories for the UI picker */
@@ -168,6 +235,23 @@ export const KEY_CATEGORIES: { name: string; codes: number[] }[] = [
         codes: [0x0053, 0x0054, 0x0055, 0x0056, 0x0057, 0x0058, 0x0059, 0x005A, 0x005B, 0x005C, 0x005D, 0x005E, 0x005F, 0x0060, 0x0061, 0x0062, 0x0063],
     },
     {
+        name: 'Layers',
+        codes: [
+            // MO — Momentary (most common, used as Fn key)
+            0x5220, 0x5221, 0x5222, 0x5223, 0x5224, 0x5225, 0x5226, 0x5227, 0x5228, 0x5229,
+            // TG — Toggle on/off
+            0x5260, 0x5261, 0x5262, 0x5263, 0x5264, 0x5265, 0x5266, 0x5267, 0x5268, 0x5269,
+            // TO — Turn On (switch to layer, deactivate others)
+            0x5200, 0x5201, 0x5202, 0x5203, 0x5204, 0x5205, 0x5206, 0x5207, 0x5208, 0x5209,
+            // OSL — One-Shot (active for one keypress)
+            0x5280, 0x5281, 0x5282, 0x5283, 0x5284, 0x5285, 0x5286, 0x5287, 0x5288, 0x5289,
+            // TT — Tap-Toggle (hold=momentary, multi-tap=toggle)
+            0x52C0, 0x52C1, 0x52C2, 0x52C3, 0x52C4, 0x52C5, 0x52C6, 0x52C7, 0x52C8, 0x52C9,
+            // DF — Default Layer (change base layer)
+            0x5240, 0x5241, 0x5242, 0x5243, 0x5244, 0x5245, 0x5246, 0x5247, 0x5248, 0x5249,
+        ],
+    },
+    {
         name: 'Special',
         codes: [0x0046, 0x0047, 0x0048, 0x0000, 0x0001],
     },
@@ -187,6 +271,15 @@ export function buildModKeycode(baseCode: number, mods: { ctrl?: boolean; shift?
 export const getKeyLabel = (code: number): string => {
     // Direct lookup first
     if (KEYCODE_MAP[code] !== undefined) return KEYCODE_MAP[code] || "None";
+
+    // LT(layer, kc) — Layer Tap: 0x4000-0x4FFF
+    // Bits 8-11 = layer (0-15), bits 0-7 = base keycode
+    if (code >= 0x4000 && code <= 0x4FFF) {
+        const layer = (code >> 8) & 0xF;
+        const baseKc = code & 0xFF;
+        const baseLabel = KEYCODE_MAP[baseKc]?.replace('\n', '') ?? `0x${baseKc.toString(16).toUpperCase()}`;
+        return `LT(${layer},${baseLabel})`;
+    }
 
     // Check for modifier combo keycodes (bits 8-11 = modifier flags)
     const base = code & 0xFF;

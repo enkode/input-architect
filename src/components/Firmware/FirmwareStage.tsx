@@ -77,8 +77,8 @@ export function FirmwareStage() {
                 <div className="flex items-start gap-3 p-4 rounded-lg bg-green-500/5 border border-green-500/20">
                     <Shield size={20} className="text-green-500 shrink-0 mt-0.5" />
                     <div className="text-xs text-green-400/80">
-                        <span className="font-semibold text-green-400">Safe to flash.</span> The RP2040 bootloader is permanent and cannot be overwritten.
-                        If anything goes wrong, re-enter bootloader mode and try again. Have an external keyboard handy.
+                        <span className="font-semibold text-green-400">Safe to flash.</span> The RP2040 bootloader is burned into ROM and cannot be overwritten.
+                        If a flash fails, the chip automatically falls back to USB boot mode. Have an external keyboard handy.
                     </div>
                 </div>
 
