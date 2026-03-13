@@ -1,3 +1,15 @@
+ > ## ⚠️ This project has been merged into [Framework Deck](https://github.com/enkode/FrameworkDeck)
+>
+> **Input Architect is no longer maintained as a standalone app.**
+>
+> All features — key remapping, per-key RGB, firmware flashing, config snapshots, multi-device switching, diagnostics — are now part of the **Keyboard** module inside [Framework Deck](https://github.com/enkode/FrameworkDeck), which also adds live oscilloscope telemetry, fan control, power management, battery health, LED Matrix editing, and more.
+>
+> **[⬇ Download Framework Deck](https://github.com/enkode/FrameworkDeck/releases/latest)** — drop-in replacement. Connect your device the same way. Saved configs export/import as JSON.
+>
+> This repository is archived for historical reference. The full commit history (v0.1–v0.15) is documented in the [Framework Deck changelog](https://github.com/enkode/FrameworkDeck/blob/main/CHANGELOG.md).
+
+---
+
 <p align="center">
   <img src="https://raw.githubusercontent.com/enkode/input-architect/main/docs/banner.svg" alt="Input Architect" width="600" />
 </p>
